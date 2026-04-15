@@ -1,0 +1,12 @@
+{
+  "name": "co-ordinate",
+  "version": "0.1.0",
+  "description": "A coordination-first planning agent that refines rough ideas into realistic roadmaps.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "start": "node server.js"
+  }
+}
+

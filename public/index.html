@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Co-ordinate</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">Co-ordinate</p>
+          <h1>Your idea inbox, planner, and clash detector in one place.</h1>
+          <p class="hero-text">
+            Drop in a messy thought. Co-ordinate refines it, turns it into a realistic roadmap, and checks whether it
+            actually fits beside everything else you already want to do.
+          </p>
+        </div>
+        <div class="hero-panel">
+          <div class="hero-panel__label">Coordination rule</div>
+          <p id="coordinationStatus">Loading your board...</p>
+        </div>
+      </header>
+
+      <main class="layout">
+        <section class="panel panel--intake">
+          <div class="panel-heading">
+            <div>
+              <p class="section-label">Idea inbox</p>
+              <h2>Start with the rough version</h2>
+            </div>
+          </div>
+
+          <form id="ideaForm" class="idea-form">
+            <label class="sr-only" for="rawIdea">Your idea</label>
+            <textarea
+              id="rawIdea"
+              name="rawIdea"
+              rows="8"
+              placeholder="Example: I want to build an AI agent that keeps all my plans aligned, helps me turn random ideas into practical roadmaps, and makes sure they do not compete for the same time."
+            ></textarea>
+            <div class="form-footer">
+              <p class="hint">Write however you think. The app will turn it into structure.</p>
+              <button type="submit" id="submitButton">Refine and schedule</button>
+            </div>
+          </form>
+        </section>
+
+        <section class="panel panel--settings">
+          <div class="panel-heading">
+            <div>
+              <p class="section-label">Capacity</p>
+              <h2>Protect your actual week</h2>
+            </div>
+          </div>
+
+          <form id="settingsForm" class="settings-form">
+            <label for="weeklyCapacity">Hours you can realistically give your plans each week</label>
+            <div class="capacity-row">
+              <input id="weeklyCapacity" name="weeklyCapacity" type="range" min="4" max="40" step="1" value="12" />
+              <output id="weeklyCapacityValue">12 hours</output>
+            </div>
+            <button type="submit" class="button-secondary">Rebalance roadmap load</button>
+          </form>
+        </section>
+
+        <section class="panel panel--timeline">
+          <div class="panel-heading">
+            <div>
+              <p class="section-label">Upcoming load</p>
+              <h2>Next 12 weeks</h2>
+            </div>
+          </div>
+          <div id="weeklyView" class="weekly-grid"></div>
+        </section>
+
+        <section class="panel panel--plans">
+          <div class="panel-heading">
+            <div>
+              <p class="section-label">Roadmaps</p>
+              <h2>Every active idea, coordinated</h2>
+            </div>
+          </div>
+          <div id="plansList" class="plans-list"></div>
+        </section>
+      </main>
+    </div>
+
+    <template id="planCardTemplate">
+      <article class="plan-card">
+        <div class="plan-card__top">
+          <div>
+            <p class="plan-card__category"></p>
+            <h3 class="plan-card__title"></h3>
+          </div>
+          <p class="plan-card__range"></p>
+        </div>
+        <p class="plan-card__summary"></p>
+        <div class="plan-card__meta">
+          <div>
+            <span class="meta-label">First move</span>
+            <p class="meta-copy plan-card__first-move"></p>
+          </div>
+          <div>
+            <span class="meta-label">Success signal</span>
+            <p class="meta-copy plan-card__success"></p>
+          </div>
+        </div>
+        <div class="alerts plan-card__alerts"></div>
+        <div class="phases plan-card__phases"></div>
+      </article>
+    </template>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
+
