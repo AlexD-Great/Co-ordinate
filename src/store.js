@@ -2,23 +2,12 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { rebalanceState } from "./planner.js";
+import { createDefaultState, createPlan, rebalanceState } from "./planner.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const dataDir = path.join(__dirname, "..", "data");
 const statePath = path.join(dataDir, "plans.json");
-
-const defaultState = {
-  settings: {
-    weeklyCapacity: 12,
-  },
-  plans: [],
-  coordination: {
-    alerts: [],
-    weeklyView: [],
-  },
-};
 
 async function ensureStateFile() {
   await mkdir(dataDir, { recursive: true });
@@ -26,8 +15,23 @@ async function ensureStateFile() {
   try {
     await readFile(statePath, "utf8");
   } catch {
-    await writeFile(statePath, JSON.stringify(defaultState, null, 2), "utf8");
+    await writeFile(statePath, JSON.stringify(createDefaultState(), null, 2), "utf8");
   }
+}
+
+function normalizePlanRecord(plan) {
+  if (plan && Array.isArray(plan.tasks) && Array.isArray(plan.milestones) && plan.idea) {
+    return plan;
+  }
+
+  const sourceIdea = plan?.idea?.rawInput || plan?.rawIdea || plan?.title || "Untitled imported plan";
+  const migrated = createPlan(sourceIdea);
+
+  return {
+    ...migrated,
+    createdAt: plan?.createdAt || migrated.createdAt,
+    updatedAt: plan?.updatedAt || migrated.updatedAt,
+  };
 }
 
 export async function readState() {
@@ -36,17 +40,25 @@ export async function readState() {
 
   try {
     const parsed = JSON.parse(file);
+    const plans = Array.isArray(parsed.plans) ? parsed.plans.map(normalizePlanRecord) : [];
+    const ideas = Array.isArray(parsed.ideas) && parsed.ideas.length > 0
+      ? parsed.ideas
+      : plans.map((plan) => plan.idea).filter(Boolean);
+
     return rebalanceState({
-      ...defaultState,
+      ...createDefaultState(),
       ...parsed,
       settings: {
-        ...defaultState.settings,
+        ...createDefaultState().settings,
         ...(parsed.settings || {}),
       },
-      plans: Array.isArray(parsed.plans) ? parsed.plans : [],
+      ideas,
+      plans,
+      planVersions: Array.isArray(parsed.planVersions) ? parsed.planVersions : [],
+      storageReferences: Array.isArray(parsed.storageReferences) ? parsed.storageReferences : [],
     });
   } catch {
-    return defaultState;
+    return createDefaultState();
   }
 }
 
@@ -54,4 +66,3 @@ export async function writeState(state) {
   await ensureStateFile();
   await writeFile(statePath, JSON.stringify(state, null, 2), "utf8");
 }
-

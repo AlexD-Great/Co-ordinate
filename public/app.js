@@ -1,14 +1,6 @@
-import { createPlan, rebalanceState } from "/src/planner.js";
+import { createDefaultState, createPlan, rebalanceState } from "/src/planner.js";
 
 const storageKey = "co-ordinate-state";
-const defaultState = {
-  settings: { weeklyCapacity: 12 },
-  plans: [],
-  coordination: {
-    alerts: [],
-    weeklyView: [],
-  },
-};
 
 const state = {
   data: null,
@@ -23,6 +15,7 @@ const elements = {
   weeklyCapacity: document.querySelector("#weeklyCapacity"),
   weeklyCapacityValue: document.querySelector("#weeklyCapacityValue"),
   coordinationStatus: document.querySelector("#coordinationStatus"),
+  backendStatus: document.querySelector("#backendStatus"),
   weeklyView: document.querySelector("#weeklyView"),
   plansList: document.querySelector("#plansList"),
   planCardTemplate: document.querySelector("#planCardTemplate"),
@@ -35,16 +28,16 @@ function setCapacityLabel(value) {
 function readLocalState() {
   const saved = window.localStorage.getItem(storageKey);
   if (!saved) {
-    return rebalanceState(defaultState);
+    return rebalanceState(createDefaultState());
   }
 
   try {
     return rebalanceState({
-      ...defaultState,
+      ...createDefaultState(),
       ...JSON.parse(saved),
     });
   } catch {
-    return rebalanceState(defaultState);
+    return rebalanceState(createDefaultState());
   }
 }
 
@@ -53,7 +46,7 @@ function writeLocalState(nextState) {
 }
 
 function escapeHtml(text) {
-  return text
+  return String(text)
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")
     .replaceAll(">", "&gt;")
@@ -63,13 +56,10 @@ function escapeHtml(text) {
 
 function renderCoordination(data) {
   const alerts = data.coordination?.alerts || [];
-  const prefix =
-    state.mode === "local"
-      ? "Preview mode is using browser storage. "
-      : "";
-
+  const prefix = state.mode === "local" ? "Preview mode is using browser storage. " : "";
   elements.coordinationStatus.textContent =
     prefix + (alerts[0] || "No active plans yet. Add your first idea and the board will coordinate around it.");
+  elements.backendStatus.textContent = `Scheduler: ${data.coordination?.schedulerBackend || "n/a"} | Storage: ${data.coordination?.storageBackend || "n/a"}`;
 }
 
 function renderWeeklyView(data) {
@@ -98,34 +88,53 @@ function renderWeeklyView(data) {
   });
 }
 
-function renderPhase(phase) {
-  const phaseElement = document.createElement("section");
-  const schedule = phase.scheduledWeeks.map((week) => `${week.label} (${week.hours}h)`).join(", ");
+function renderMilestone(milestone, tasks) {
+  const milestoneElement = document.createElement("section");
+  const relatedTasks = tasks.filter((task) => task.milestoneId === milestone.id);
 
-  phaseElement.className = "phase";
-  phaseElement.innerHTML = `
+  milestoneElement.className = "phase";
+  milestoneElement.innerHTML = `
     <div class="phase__top">
       <div>
-        <h4>${escapeHtml(phase.name)}</h4>
-        <p>${escapeHtml(phase.outcome)}</p>
+        <h4>${escapeHtml(milestone.title)}</h4>
+        <p>${escapeHtml(milestone.outcome)}</p>
       </div>
-      <div class="phase__schedule">${escapeHtml(schedule)}</div>
+      <div class="phase__schedule">${escapeHtml(milestone.dateRange || "Not scheduled yet")}</div>
     </div>
-    <ul>${phase.tasks.map((task) => `<li>${escapeHtml(task)}</li>`).join("")}</ul>
+    <ul>${relatedTasks.map((task) => `<li>${escapeHtml(task.title)} • ${task.effortHours}h</li>`).join("")}</ul>
   `;
 
-  return phaseElement;
+  return milestoneElement;
+}
+
+function renderConflicts(conflicts) {
+  if (!conflicts?.length) {
+    return `<div class="empty-inline">No active coordination conflicts on this plan.</div>`;
+  }
+
+  return conflicts
+    .map(
+      (conflict) => `
+        <div class="conflict-card conflict-card--${escapeHtml(conflict.severity)}">
+          <strong>${escapeHtml(conflict.type)}</strong>
+          <p>${escapeHtml(conflict.message)}</p>
+          <p>${escapeHtml(conflict.resolution)}</p>
+        </div>
+      `,
+    )
+    .join("");
 }
 
 function renderPlans(data) {
   const plans = data.plans || [];
+  const referencesById = new Map((data.storageReferences || []).map((reference) => [reference.id, reference]));
   elements.plansList.innerHTML = "";
 
   if (plans.length === 0) {
     elements.plansList.innerHTML = `
       <div class="empty-state">
-        The board is empty. Add an idea and Co-ordinate will refine it into phases, schedule the effort, and guard
-        against clashes with everything else on your list.
+        The board is empty. Add an idea and Co-ordinate will refine it into tasks, schedule the work, store a snapshot,
+        and warn you when plans are colliding.
       </div>
     `;
     return;
@@ -140,16 +149,24 @@ function renderPlans(data) {
     const summary = fragment.querySelector(".plan-card__summary");
     const firstMove = fragment.querySelector(".plan-card__first-move");
     const success = fragment.querySelector(".plan-card__success");
+    const version = fragment.querySelector(".plan-card__version");
+    const storage = fragment.querySelector(".plan-card__storage");
+    const scheduler = fragment.querySelector(".plan-card__scheduler");
     const alerts = fragment.querySelector(".plan-card__alerts");
+    const conflicts = fragment.querySelector(".plan-card__conflicts");
     const phases = fragment.querySelector(".plan-card__phases");
+    const latestReference = referencesById.get(plan.storage?.latestStorageReferenceId);
 
     card.style.animationDelay = `${index * 45}ms`;
-    category.textContent = plan.category;
+    category.textContent = plan.idea?.category || "General";
     title.textContent = plan.title;
     range.textContent = plan.dateRange;
     summary.textContent = plan.summary;
     firstMove.textContent = plan.firstMove;
     success.textContent = plan.successSignal;
+    version.textContent = plan.versionCount ? `v${plan.versionCount}` : "Not versioned yet";
+    storage.textContent = latestReference?.cid || "Pending first snapshot";
+    scheduler.textContent = plan.scheduler?.backend || "Unknown";
 
     if (plan.planAlerts?.length) {
       plan.planAlerts.forEach((alert) => {
@@ -160,8 +177,9 @@ function renderPlans(data) {
       });
     }
 
-    plan.phases.forEach((phase) => {
-      phases.appendChild(renderPhase(phase));
+    conflicts.innerHTML = renderConflicts(plan.conflicts);
+    plan.milestones.forEach((milestone) => {
+      phases.appendChild(renderMilestone(milestone, plan.tasks));
     });
 
     elements.plansList.appendChild(fragment);
@@ -220,15 +238,17 @@ async function handleIdeaSubmit(event) {
     let data;
 
     if (state.mode === "api") {
-      data = await requestJson("/api/ideas", {
+      data = await requestJson("/api/plans", {
         method: "POST",
         body: JSON.stringify({ rawIdea }),
       });
     } else {
       const current = readLocalState();
+      const plan = createPlan(rawIdea);
       data = rebalanceState({
         ...current,
-        plans: [...current.plans, createPlan(rawIdea)],
+        ideas: [...(current.ideas || []), plan.idea],
+        plans: [...current.plans, plan],
       });
       writeLocalState(data);
     }

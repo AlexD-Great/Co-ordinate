@@ -20,6 +20,7 @@
         <div class="hero-panel">
           <div class="hero-panel__label">Coordination rule</div>
           <p id="coordinationStatus">Loading your board...</p>
+          <p class="hero-panel__support" id="backendStatus"></p>
         </div>
       </header>
 
@@ -107,7 +108,22 @@
             <p class="meta-copy plan-card__success"></p>
           </div>
         </div>
+        <div class="plan-card__meta plan-card__meta--compact">
+          <div>
+            <span class="meta-label">Version</span>
+            <p class="meta-copy plan-card__version"></p>
+          </div>
+          <div>
+            <span class="meta-label">Latest snapshot</span>
+            <p class="meta-copy plan-card__storage"></p>
+          </div>
+          <div>
+            <span class="meta-label">Scheduler</span>
+            <p class="meta-copy plan-card__scheduler"></p>
+          </div>
+        </div>
         <div class="alerts plan-card__alerts"></div>
+        <div class="plan-card__conflicts"></div>
         <div class="phases plan-card__phases"></div>
       </article>
     </template>
@@ -115,4 +131,3 @@
     <script type="module" src="/app.js"></script>
   </body>
 </html>
-
