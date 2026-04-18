@@ -1,5 +1,5 @@
 import { writeSnapshot } from "./archive.js";
-import { createPlan, getPlanHistory, rebalanceState } from "./planner.js";
+import { applyPlanEdits, createPlan, getPlanHistory, rebalanceState } from "./planner.js";
 
 function scheduleFingerprint(plan) {
   return JSON.stringify(
@@ -58,8 +58,16 @@ async function attachSnapshotAndVersion({ nextState, previousState, planId, chan
 
   return {
     ...nextState,
+    settings: {
+      ...nextState.settings,
+      storageBackend: storageReference.backend,
+    },
     storageReferences: [...(nextState.storageReferences || []), storageReference],
     planVersions: [...(nextState.planVersions || []), version],
+    coordination: {
+      ...nextState.coordination,
+      storageBackend: storageReference.backend,
+    },
     plans: nextState.plans.map((item) => {
       if (item.id !== planId) {
         return item;
@@ -77,6 +85,7 @@ async function attachSnapshotAndVersion({ nextState, previousState, planId, chan
         versionCount: versionNumber,
         storage: {
           ...item.storage,
+          backend: storageReference.backend,
           latestStorageReferenceId: storageReference.id,
           storageReferenceIds,
         },
@@ -143,6 +152,21 @@ export async function updateSettingsWorkflow(state, patch) {
     previousState: state,
     reason: "Rescheduled after settings changed.",
     changeType: "settings-rescheduled",
+  });
+}
+
+export async function updatePlanWorkflow(state, planId, patch) {
+  const nextState = rebalanceState({
+    ...state,
+    plans: (state.plans || []).map((plan) => (plan.id === planId ? applyPlanEdits(plan, patch) : plan)),
+  });
+
+  return attachVersionsForChangedPlans({
+    nextState,
+    previousState: state,
+    reason: "Plan details were edited and the board was rescheduled.",
+    changeType: "edited",
+    targetPlanIds: [planId],
   });
 }
 

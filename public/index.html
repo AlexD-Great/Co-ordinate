@@ -122,8 +122,39 @@
             <p class="meta-copy plan-card__scheduler"></p>
           </div>
         </div>
+        <div class="plan-card__controls">
+          <button type="button" class="button-secondary plan-card__edit-toggle">Adjust plan</button>
+          <button type="button" class="button-secondary plan-card__reschedule">Reschedule now</button>
+        </div>
+        <form class="plan-editor">
+          <label>
+            Title
+            <input type="text" name="title" class="plan-editor__title" />
+          </label>
+          <label>
+            Objective
+            <textarea name="objective" rows="3" class="plan-editor__objective"></textarea>
+          </label>
+          <label>
+            Summary
+            <textarea name="summary" rows="3" class="plan-editor__summary"></textarea>
+          </label>
+          <label>
+            Status
+            <select name="status" class="plan-editor__status">
+              <option value="active">Active</option>
+              <option value="paused">Paused</option>
+              <option value="archived">Archived</option>
+            </select>
+          </label>
+          <div class="plan-editor__tasks"></div>
+          <div class="plan-editor__actions">
+            <button type="submit">Save and reschedule</button>
+          </div>
+        </form>
         <div class="alerts plan-card__alerts"></div>
         <div class="plan-card__conflicts"></div>
+        <div class="plan-card__history"></div>
         <div class="phases plan-card__phases"></div>
       </article>
     </template>

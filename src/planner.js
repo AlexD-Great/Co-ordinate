@@ -253,6 +253,9 @@ const defaultSettings = {
   schedulerBackend: "flow-forte-local-adapter",
   storageBackend: "local-content-addressed-snapshots",
 };
+const allowedPlanStatuses = new Set(["active", "paused", "archived"]);
+const allowedTaskPriorities = new Set(["high", "medium", "low"]);
+const allowedTaskStatuses = new Set(["pending", "scheduled", "done", "blocked"]);
 
 function createId(prefix) {
   return `${prefix}_${Math.random().toString(36).slice(2, 10)}`;
@@ -528,6 +531,56 @@ export function createPlan(rawIdea) {
   };
 }
 
+export function applyPlanEdits(plan, patch = {}) {
+  const taskUpdates = new Map(
+    Array.isArray(patch.taskUpdates)
+      ? patch.taskUpdates.filter((item) => item && typeof item.id === "string").map((item) => [item.id, item])
+      : [],
+  );
+
+  const tasks = plan.tasks.map((task) => {
+    const taskPatch = taskUpdates.get(task.id);
+    if (!taskPatch) {
+      return task;
+    }
+
+    const nextPriority = allowedTaskPriorities.has(taskPatch.priority) ? taskPatch.priority : task.priority;
+    const nextStatus = allowedTaskStatuses.has(taskPatch.status) ? taskPatch.status : task.status;
+    const nextEffortHours = Number.isFinite(Number(taskPatch.effortHours))
+      ? Math.max(1, Math.round(Number(taskPatch.effortHours)))
+      : task.effortHours;
+
+    return {
+      ...task,
+      title: typeof taskPatch.title === "string" && taskPatch.title.trim() ? taskPatch.title.trim() : task.title,
+      summary: typeof taskPatch.summary === "string" && taskPatch.summary.trim() ? taskPatch.summary.trim() : task.summary,
+      priority: nextPriority,
+      status: nextStatus,
+      effortHours: nextEffortHours,
+      durationWeeksEstimate: Math.max(1, Math.ceil(nextEffortHours / 4)),
+    };
+  });
+
+  const totalEffortHours = tasks.reduce((sum, task) => sum + task.effortHours, 0);
+  const nextStatus = allowedPlanStatuses.has(patch.status) ? patch.status : plan.status;
+
+  return {
+    ...plan,
+    title: typeof patch.title === "string" && patch.title.trim() ? patch.title.trim() : plan.title,
+    summary: typeof patch.summary === "string" && patch.summary.trim() ? patch.summary.trim() : plan.summary,
+    objective: typeof patch.objective === "string" && patch.objective.trim() ? patch.objective.trim() : plan.objective,
+    status: nextStatus,
+    tasks,
+    roadmap: {
+      ...plan.roadmap,
+      tasks,
+      totalEffortHours,
+    },
+    totalEffortHours,
+    updatedAt: new Date().toISOString(),
+  };
+}
+
 function startOfWeek(date = new Date()) {
   const next = new Date(date);
   const day = next.getDay();
@@ -640,6 +693,42 @@ function groupBy(items, keyFn) {
 }
 
 function schedulePlan(plan, weeklyLoad, settings, weekBase) {
+  if (plan.status !== "active") {
+    const unscheduledTasks = plan.tasks.map((task) => ({
+      ...task,
+      scheduledWeekIndices: [],
+      scheduleEventId: null,
+      status: task.status === "done" || task.status === "blocked" ? task.status : "pending",
+    }));
+
+    const milestones = plan.milestones.map((milestone) => ({
+      ...milestone,
+      startWeekIndex: null,
+      endWeekIndex: null,
+      dateRange: "Not scheduled while paused",
+    }));
+
+    return {
+      ...plan,
+      tasks: unscheduledTasks,
+      milestones,
+      roadmap: {
+        ...plan.roadmap,
+        milestones,
+        tasks: unscheduledTasks,
+      },
+      scheduleEvents: [],
+      scheduler: {
+        ...plan.scheduler,
+        backend: settings.schedulerBackend,
+        syncStatus: "paused",
+      },
+      startWeekIndex: 0,
+      endWeekIndex: 0,
+      dateRange: "Not scheduled",
+    };
+  }
+
   const orderedTasks = [...plan.tasks].sort((left, right) => {
     if (left.phaseIndex !== right.phaseIndex) {
       return left.phaseIndex - right.phaseIndex;
@@ -808,6 +897,16 @@ function detectConflicts(plans, settings) {
 
 function buildPlanAlerts(plan, settings) {
   const alerts = [];
+  if (plan.status === "paused") {
+    alerts.push("This plan is paused and currently does not consume scheduling capacity.");
+    return alerts;
+  }
+
+  if (plan.status === "archived") {
+    alerts.push("This plan is archived and excluded from active scheduling.");
+    return alerts;
+  }
+
   const highSeverityConflicts = plan.conflicts.filter((conflict) => conflict.severity === "high");
   const busyEvents = plan.scheduleEvents.filter((event) =>
     event.allocatedWeeks.some((week) => week.hours >= Math.max(settings.weeklyCapacity * 0.75, settings.weeklyCapacity - 2)),
@@ -930,8 +1029,10 @@ export function getPlanHistory(state, planId) {
   const versions = (state.planVersions || []).filter((version) => version.planId === planId);
   const referencesById = new Map((state.storageReferences || []).map((reference) => [reference.id, reference]));
 
-  return versions.map((version) => ({
-    ...version,
-    storageReference: referencesById.get(version.storageReferenceId) || null,
-  }));
+  return versions
+    .sort((left, right) => right.versionNumber - left.versionNumber)
+    .map((version) => ({
+      ...version,
+      storageReference: referencesById.get(version.storageReferenceId) || null,
+    }));
 }

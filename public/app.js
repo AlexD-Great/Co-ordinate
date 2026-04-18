@@ -1,10 +1,11 @@
-import { createDefaultState, createPlan, rebalanceState } from "/src/planner.js";
+import { applyPlanEdits, createDefaultState, createPlan, rebalanceState } from "/src/planner.js";
 
 const storageKey = "co-ordinate-state";
 
 const state = {
   data: null,
   mode: "api",
+  editorPlanId: null,
 };
 
 const elements = {
@@ -101,7 +102,7 @@ function renderMilestone(milestone, tasks) {
       </div>
       <div class="phase__schedule">${escapeHtml(milestone.dateRange || "Not scheduled yet")}</div>
     </div>
-    <ul>${relatedTasks.map((task) => `<li>${escapeHtml(task.title)} • ${task.effortHours}h</li>`).join("")}</ul>
+    <ul>${relatedTasks.map((task) => `<li>${escapeHtml(task.title)} • ${task.effortHours}h • ${escapeHtml(task.priority)}</li>`).join("")}</ul>
   `;
 
   return milestoneElement;
@@ -123,6 +124,88 @@ function renderConflicts(conflicts) {
       `,
     )
     .join("");
+}
+
+function buildHistoryMarkup(history) {
+  if (!history.length) {
+    return `<div class="empty-inline">No version history yet.</div>`;
+  }
+
+  return history
+    .slice(0, 3)
+    .map((version) => {
+      const storageRef = version.storageReference;
+      const cidMarkup = storageRef?.gatewayUrl
+        ? `<a href="${escapeHtml(storageRef.gatewayUrl)}" target="_blank" rel="noreferrer">${escapeHtml(storageRef.cid)}</a>`
+        : escapeHtml(storageRef?.cid || "pending");
+
+      return `
+        <div class="history-item">
+          <strong>v${escapeHtml(version.versionNumber)}</strong>
+          <p>${escapeHtml(version.changeType)} • ${escapeHtml(version.note)}</p>
+          <p>${cidMarkup}</p>
+        </div>
+      `;
+    })
+    .join("");
+}
+
+function buildTaskEditorMarkup(tasks) {
+  return tasks
+    .map(
+      (task) => `
+        <div class="task-editor" data-task-id="${escapeHtml(task.id)}">
+          <label>
+            Task
+            <input type="text" name="task-title-${escapeHtml(task.id)}" value="${escapeHtml(task.title)}" />
+          </label>
+          <label>
+            Hours
+            <input type="number" min="1" step="1" name="task-hours-${escapeHtml(task.id)}" value="${escapeHtml(task.effortHours)}" />
+          </label>
+          <label>
+            Priority
+            <select name="task-priority-${escapeHtml(task.id)}">
+              <option value="high" ${task.priority === "high" ? "selected" : ""}>High</option>
+              <option value="medium" ${task.priority === "medium" ? "selected" : ""}>Medium</option>
+              <option value="low" ${task.priority === "low" ? "selected" : ""}>Low</option>
+            </select>
+          </label>
+          <label>
+            Status
+            <select name="task-status-${escapeHtml(task.id)}">
+              <option value="pending" ${task.status === "pending" ? "selected" : ""}>Pending</option>
+              <option value="scheduled" ${task.status === "scheduled" ? "selected" : ""}>Scheduled</option>
+              <option value="done" ${task.status === "done" ? "selected" : ""}>Done</option>
+              <option value="blocked" ${task.status === "blocked" ? "selected" : ""}>Blocked</option>
+            </select>
+          </label>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function extractTaskUpdates(form, plan) {
+  return plan.tasks.map((task) => ({
+    id: task.id,
+    title: form.get(`task-title-${task.id}`),
+    effortHours: Number(form.get(`task-hours-${task.id}`)),
+    priority: form.get(`task-priority-${task.id}`),
+    status: form.get(`task-status-${task.id}`),
+  }));
+}
+
+function getPlanHistoryFromState(data, planId) {
+  const referencesById = new Map((data.storageReferences || []).map((reference) => [reference.id, reference]));
+
+  return (data.planVersions || [])
+    .filter((version) => version.planId === planId)
+    .sort((left, right) => right.versionNumber - left.versionNumber)
+    .map((version) => ({
+      ...version,
+      storageReference: referencesById.get(version.storageReferenceId) || null,
+    }));
 }
 
 function renderPlans(data) {
@@ -152,21 +235,43 @@ function renderPlans(data) {
     const version = fragment.querySelector(".plan-card__version");
     const storage = fragment.querySelector(".plan-card__storage");
     const scheduler = fragment.querySelector(".plan-card__scheduler");
+    const editToggle = fragment.querySelector(".plan-card__edit-toggle");
+    const rescheduleButton = fragment.querySelector(".plan-card__reschedule");
+    const editor = fragment.querySelector(".plan-editor");
+    const titleInput = fragment.querySelector(".plan-editor__title");
+    const objectiveInput = fragment.querySelector(".plan-editor__objective");
+    const summaryInput = fragment.querySelector(".plan-editor__summary");
+    const statusInput = fragment.querySelector(".plan-editor__status");
+    const tasksEditor = fragment.querySelector(".plan-editor__tasks");
     const alerts = fragment.querySelector(".plan-card__alerts");
     const conflicts = fragment.querySelector(".plan-card__conflicts");
+    const history = fragment.querySelector(".plan-card__history");
     const phases = fragment.querySelector(".plan-card__phases");
     const latestReference = referencesById.get(plan.storage?.latestStorageReferenceId);
+    const planHistory = getPlanHistoryFromState(data, plan.id);
+    const editorOpen = state.editorPlanId === plan.id;
 
     card.style.animationDelay = `${index * 45}ms`;
-    category.textContent = plan.idea?.category || "General";
+    category.textContent = `${plan.idea?.category || "General"} • ${plan.status}`;
     title.textContent = plan.title;
     range.textContent = plan.dateRange;
     summary.textContent = plan.summary;
     firstMove.textContent = plan.firstMove;
     success.textContent = plan.successSignal;
     version.textContent = plan.versionCount ? `v${plan.versionCount}` : "Not versioned yet";
-    storage.textContent = latestReference?.cid || "Pending first snapshot";
+    if (latestReference?.gatewayUrl) {
+      storage.innerHTML = `<a href="${escapeHtml(latestReference.gatewayUrl)}" target="_blank" rel="noreferrer">${escapeHtml(latestReference.cid)}</a>`;
+    } else {
+      storage.textContent = latestReference?.cid || "Pending first snapshot";
+    }
     scheduler.textContent = plan.scheduler?.backend || "Unknown";
+    editToggle.textContent = editorOpen ? "Close editor" : "Adjust plan";
+    titleInput.value = plan.title;
+    objectiveInput.value = plan.objective;
+    summaryInput.value = plan.summary;
+    statusInput.value = plan.status;
+    tasksEditor.innerHTML = buildTaskEditorMarkup(plan.tasks);
+    editor.classList.toggle("is-open", editorOpen);
 
     if (plan.planAlerts?.length) {
       plan.planAlerts.forEach((alert) => {
@@ -178,8 +283,46 @@ function renderPlans(data) {
     }
 
     conflicts.innerHTML = renderConflicts(plan.conflicts);
+    history.innerHTML = buildHistoryMarkup(planHistory);
     plan.milestones.forEach((milestone) => {
       phases.appendChild(renderMilestone(milestone, plan.tasks));
+    });
+
+    editToggle.addEventListener("click", () => {
+      state.editorPlanId = editorOpen ? null : plan.id;
+      render(state.data);
+    });
+
+    rescheduleButton.addEventListener("click", async () => {
+      rescheduleButton.disabled = true;
+      try {
+        const dataAfterReschedule = await triggerReschedule(plan.id);
+        render(dataAfterReschedule);
+      } catch (error) {
+        window.alert(error.message);
+      } finally {
+        rescheduleButton.disabled = false;
+      }
+    });
+
+    editor.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const form = new FormData(editor);
+      const patch = {
+        title: form.get("title"),
+        objective: form.get("objective"),
+        summary: form.get("summary"),
+        status: form.get("status"),
+        taskUpdates: extractTaskUpdates(form, plan),
+      };
+
+      try {
+        const updated = await savePlanEdits(plan.id, patch);
+        state.editorPlanId = null;
+        render(updated);
+      } catch (error) {
+        window.alert(error.message);
+      }
     });
 
     elements.plansList.appendChild(fragment);
@@ -220,6 +363,37 @@ async function loadState() {
     writeLocalState(data);
     render(data);
   }
+}
+
+async function savePlanEdits(planId, patch) {
+  if (state.mode === "api") {
+    return requestJson(`/api/plans/${planId}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    });
+  }
+
+  const current = readLocalState();
+  const updated = rebalanceState({
+    ...current,
+    plans: current.plans.map((plan) => (plan.id === planId ? applyPlanEdits(plan, patch) : plan)),
+  });
+  writeLocalState(updated);
+  return updated;
+}
+
+async function triggerReschedule(planId) {
+  if (state.mode === "api") {
+    return requestJson(`/api/plans/${planId}/reschedule`, {
+      method: "POST",
+      body: JSON.stringify({ note: "Manual reschedule requested from the UI." }),
+    });
+  }
+
+  const current = readLocalState();
+  const updated = rebalanceState({ ...current });
+  writeLocalState(updated);
+  return updated;
 }
 
 async function handleIdeaSubmit(event) {

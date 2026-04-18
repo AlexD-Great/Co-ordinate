@@ -7,6 +7,7 @@ import {
   createPlanWorkflow,
   getPlanHistoryWorkflow,
   reschedulePlanWorkflow,
+  updatePlanWorkflow,
   updateSettingsWorkflow,
 } from "./src/coordinator.js";
 import { readState, writeState } from "./src/store.js";
@@ -83,6 +84,10 @@ function matchPlanHistory(pathname) {
 
 function matchPlanReschedule(pathname) {
   return pathname.match(/^\/api\/plans\/([^/]+)\/reschedule$/);
+}
+
+function matchPlan(pathname) {
+  return pathname.match(/^\/api\/plans\/([^/]+)$/);
 }
 
 const server = createServer(async (request, response) => {
@@ -176,6 +181,28 @@ const server = createServer(async (request, response) => {
       sendJson(response, 200, nextState);
     } catch (error) {
       sendError(response, 400, error.message || "Unable to update settings.");
+    }
+
+    return;
+  }
+
+  const planMatch = matchPlan(url.pathname);
+  if (request.method === "PATCH" && planMatch) {
+    try {
+      const [, planId] = planMatch;
+      const body = await parseBody(request);
+      const state = await readState();
+
+      if (!state.plans.some((plan) => plan.id === planId)) {
+        sendError(response, 404, "Plan not found.");
+        return;
+      }
+
+      const nextState = await updatePlanWorkflow(state, planId, body);
+      await writeState(nextState);
+      sendJson(response, 200, nextState);
+    } catch (error) {
+      sendError(response, 400, error.message || "Unable to update the plan.");
     }
 
     return;

@@ -1,6 +1,6 @@
 # Co-ordinate
 
-Last updated: 2026-04-17
+Last updated: 2026-04-18
 
 This README is the single source of truth for the Co-ordinate project.
 
@@ -29,6 +29,7 @@ Current product shape:
 - Generate a roadmap with milestones and tasks.
 - Schedule the work into weekly execution windows.
 - Detect conflicts across plans.
+- Edit a generated plan and automatically reschedule it.
 - Preserve versions and snapshot history.
 
 ## 2. Core Architecture Decisions
@@ -86,8 +87,10 @@ Current stack:
 - Vanilla HTML, CSS, and JavaScript
 - JSON file persistence in `data/plans.json`
 - Local content-addressed snapshot archive in `data/archive/`
+- `web3.storage` package for the first external IPFS/Filecoin adapter path
 
 Current key files:
+- [.env.example](/c:/Users/shelby/Desktop/Co-ordinate/.env.example): environment variables for external storage setup
 - [server.js](/c:/Users/shelby/Desktop/Co-ordinate/server.js): HTTP server and API routes
 - [src/planner.js](/c:/Users/shelby/Desktop/Co-ordinate/src/planner.js): domain models, planning engine, conflict engine, scheduling engine
 - [src/coordinator.js](/c:/Users/shelby/Desktop/Co-ordinate/src/coordinator.js): orchestration, versioning, reschedule workflow
@@ -106,6 +109,8 @@ Responsibilities:
 - Trigger roadmap generation
 - Show roadmap, milestones, and execution windows
 - Show coordination warnings and conflict cards
+- Let the user edit plans and task effort directly
+- Show recent version history and latest snapshot references
 - Show current scheduler/storage backend status
 
 Current status:
@@ -122,6 +127,7 @@ Current API surface:
 - `POST /api/generate-roadmap`
 - `POST /api/plans`
 - `POST /api/ideas` (legacy alias)
+- `PATCH /api/plans/:id`
 - `POST /api/settings`
 - `GET /api/plans/:id/history`
 - `POST /api/plans/:id/reschedule`
@@ -166,9 +172,13 @@ Current behavior:
 - Historical snapshots are written to `data/archive/<cid>.json`
 - Every snapshot produces a `StorageReference`
 - Every persisted plan change creates a `PlanVersion`
+- When `WEB3_STORAGE_TOKEN` is present, snapshot persistence now attempts a Web3.Storage upload first and falls back to the local archive if the remote upload is unavailable
 
 Current storage backend:
 - `local-content-addressed-snapshots`
+
+Runtime-capable external backend:
+- `web3-storage`
 
 ## 5. Flow Integration
 
@@ -208,11 +218,14 @@ What exists now:
 - Snapshot payloads are already content-addressed
 - A CID is generated for each persisted snapshot
 - The app database tracks those storage references
+- `src/archive.js` now includes an environment-gated Web3.Storage upload path through `WEB3_STORAGE_TOKEN`
+- If the remote upload succeeds, the returned remote CID becomes the canonical `StorageReference.cid`
+- If the remote upload fails or no token is configured, the system falls back to the local archive path without breaking the MVP
 
 What is missing:
-- Web3.Storage client integration
-- Upload pipeline from local snapshot payload -> IPFS/Filecoin
-- Use of returned remote CID as the primary permanent reference
+- Verified end-to-end upload against a real Web3.Storage account in this repo
+- A production-ready credentials and account setup story
+- A decision on whether to keep the current token-driven bridge or migrate to the newer Web3.Storage client stack after verification
 
 Implementation boundary:
 - Keep the current `StorageReference` contract and swap the persistence backend from local archive files to Web3.Storage.
@@ -351,7 +364,10 @@ Current MVP flow:
 5. The system checks cross-plan conflicts.
 6. The system persists a versioned snapshot.
 7. The UI displays roadmap structure, timing, and conflicts.
-8. A reschedule request or settings change can trigger a fresh schedule and new version snapshot.
+8. The user can edit plan details or task effort from the UI.
+9. The system automatically recalculates and reschedules after the edit.
+10. If a snapshot was stored remotely, the latest CID can be opened from the UI.
+11. A manual reschedule request or settings change can also trigger a fresh schedule and new version snapshot.
 
 Target production flow:
 1. User enters raw idea.
@@ -410,30 +426,34 @@ Done:
 - Version snapshots are now created and stored through a content-addressed storage adapter.
 - The frontend now renders the richer plan structure, backend status, and conflict cards.
 - Legacy local plan data is migrated into the new plan shape on read.
+- The storage adapter now supports an environment-gated Web3.Storage upload path with automatic local fallback.
+- Added `.env.example` and UI support for clickable remote snapshot CIDs.
+- Added user-driven plan editing from the UI.
+- Plan edits now trigger automatic recalculation and rescheduling.
+- Recent version history is now visible inside each plan card.
 
 In progress:
 - README is now being used as the project memory contract.
-- The architecture is aligned around Flow-first scheduling and Filecoin/IPFS-backed permanent storage, but both are still adapter-backed locally.
+- The architecture is aligned around Flow-first scheduling and Filecoin/IPFS-backed permanent storage, but scheduling is still local-adapter based and remote storage needs real credential verification.
 
 Not done yet:
 - Real Flow scheduled transaction integration
-- Real Web3.Storage / Filecoin persistence
+- Verified production-grade Web3.Storage / Filecoin persistence
 - Real AI idea refinement
-- User-driven plan editing UI
 
 ## 11. Next Step
 
 Exact next action:
-- Implement the first real external adapter, starting with the storage side:
-  wire `src/archive.js` to Web3.Storage so plan snapshots are uploaded and the returned CID becomes the canonical `StorageReference.cid`.
+- Extract the current scheduling behavior into a dedicated Flow adapter module:
+  move create/cancel/reissue scheduling operations behind a replaceable adapter so the local scheduler can be swapped for real Flow transaction calls without touching the rest of the app.
 
 Why this is next:
-- The current repo already creates versioned snapshot payloads.
-- Swapping local archive writes for Web3.Storage is a contained integration step.
-- It strengthens the "permanent memory" half of the architecture without forcing blockchain work and AI work at the same time.
+- The planning and editing loop is now strong enough that scheduling is the next architectural bottleneck.
+- The current code still performs scheduling inline inside the planning domain module.
+- A dedicated adapter is the cleanest path toward real Flow integration while keeping today’s local behavior working.
 
 After that:
-- Replace `flow-forte-local-adapter` with a real Flow scheduler adapter that creates and cancels scheduled transactions using the same `ScheduleEvent` contract.
+- Verify the Web3.Storage path with a real `WEB3_STORAGE_TOKEN` and then connect the new scheduler adapter to real Flow transaction creation and cancellation.
 
 ## 12. Implementation Checklist
 
@@ -452,12 +472,12 @@ After that:
 - [x] Add storage adapter boundary
 - [x] Use README as project memory
 - [x] Document current vs target architecture honestly
+- [x] Add an environment-gated Web3.Storage adapter path with local fallback
 
 ### Still Missing
-- [ ] Replace local snapshot adapter with Web3.Storage
-- [ ] Replace local scheduler adapter with real Flow integration
-- [ ] Add plan editing workflow
-- [ ] Add automatic reschedule triggers for plan edits
+- [ ] Verify Web3.Storage uploads with a real token and remote CID
+- [ ] Extract scheduling into a dedicated Flow adapter module
+- [ ] Replace the local scheduler adapter with real Flow integration
 - [ ] Add real AI planner/refinement layer
 - [ ] Add execution history beyond schedule history
 
@@ -499,3 +519,13 @@ node server.js
 ```
 
 Then open `http://localhost:3000`.
+
+## Environment
+
+Optional for remote snapshot uploads:
+
+```bash
+WEB3_STORAGE_TOKEN=your_token_here
+```
+
+If this variable is not present, Co-ordinate continues using the local snapshot archive.

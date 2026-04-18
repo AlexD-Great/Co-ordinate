@@ -6,8 +6,10 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const archiveDir = path.join(__dirname, "..", "data", "archive");
+const web3StorageToken = process.env.WEB3_STORAGE_TOKEN?.trim();
 
 const base32Alphabet = "abcdefghijklmnopqrstuvwxyz234567";
+let web3StorageModulePromise = null;
 
 function encodeVarint(value) {
   const bytes = [];
@@ -58,12 +60,73 @@ function createCidFromPayload(payload) {
   return `b${toBase32(cidBytes)}`;
 }
 
-export async function writeSnapshot({ planId, payload }) {
-  await mkdir(archiveDir, { recursive: true });
-  const cid = createCidFromPayload(payload);
-  const filePath = path.join(archiveDir, `${cid}.json`);
+async function loadWeb3StorageModule() {
+  if (!web3StorageToken) {
+    return null;
+  }
 
+  if (!web3StorageModulePromise) {
+    web3StorageModulePromise = import("web3.storage")
+      .then((module) => ({
+        File: module.File,
+        client: new module.Web3Storage({ token: web3StorageToken }),
+      }))
+      .catch(() => null);
+  }
+
+  return web3StorageModulePromise;
+}
+
+async function writeLocalArchive({ cid, payload }) {
+  await mkdir(archiveDir, { recursive: true });
+  const filePath = path.join(archiveDir, `${cid}.json`);
   await writeFile(filePath, JSON.stringify(payload, null, 2), "utf8");
+  return filePath;
+}
+
+async function writeRemoteSnapshot({ planId, payload, localCid }) {
+  const web3Storage = await loadWeb3StorageModule();
+
+  if (!web3Storage) {
+    return null;
+  }
+
+  const payloadText = JSON.stringify(payload, null, 2);
+  const fileName = `${planId}-${Date.now()}.json`;
+  const file = new web3Storage.File([payloadText], fileName, { type: "application/json" });
+  const cid = await web3Storage.client.put([file], { wrapWithDirectory: false });
+
+  return {
+    id: `storage_${Math.random().toString(36).slice(2, 10)}`,
+    planId,
+    cid,
+    backend: "web3-storage",
+    kind: "plan-snapshot",
+    filePath: null,
+    gatewayUrl: `https://dweb.link/ipfs/${cid}`,
+    localFallbackCid: localCid,
+    createdAt: new Date().toISOString(),
+  };
+}
+
+export async function writeSnapshot({ planId, payload }) {
+  const cid = createCidFromPayload(payload);
+  const filePath = await writeLocalArchive({ cid, payload });
+
+  if (web3StorageToken) {
+    try {
+      const remoteReference = await writeRemoteSnapshot({ planId, payload, localCid: cid });
+
+      if (remoteReference) {
+        return {
+          ...remoteReference,
+          filePath,
+        };
+      }
+    } catch {
+      // Fall back to the local adapter when remote upload is unavailable.
+    }
+  }
 
   return {
     id: `storage_${Math.random().toString(36).slice(2, 10)}`,
@@ -75,4 +138,3 @@ export async function writeSnapshot({ planId, payload }) {
     createdAt: new Date().toISOString(),
   };
 }
-

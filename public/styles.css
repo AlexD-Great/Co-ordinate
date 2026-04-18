@@ -207,6 +207,18 @@ textarea {
   font-family: var(--body-font);
 }
 
+input[type="text"],
+input[type="number"],
+select {
+  width: 100%;
+  padding: 0.85rem 0.95rem;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.72);
+  font-family: var(--body-font);
+}
+
 textarea:focus,
 input:focus,
 button:focus {
@@ -345,6 +357,16 @@ button:disabled {
   margin: 0;
 }
 
+.meta-copy a {
+  color: var(--accent-deep);
+  text-decoration: none;
+  border-bottom: 1px solid rgba(157, 61, 34, 0.25);
+}
+
+.meta-copy a:hover {
+  border-bottom-color: var(--accent-deep);
+}
+
 .plan-card__meta {
   margin-top: 1rem;
   padding-top: 1rem;
@@ -353,6 +375,53 @@ button:disabled {
 
 .plan-card__meta--compact {
   grid-template-columns: repeat(3, 1fr);
+}
+
+.plan-card__controls,
+.plan-editor__actions {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.plan-editor {
+  display: none;
+  gap: 0.9rem;
+  margin-top: 1rem;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.56);
+}
+
+.plan-editor.is-open {
+  display: grid;
+}
+
+.plan-editor__tasks {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.task-editor,
+.history-item {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.9rem;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.plan-card__history {
+  display: grid;
+  gap: 0.7rem;
+  margin-top: 1rem;
+}
+
+.history-item p {
+  margin: 0;
+  color: var(--muted);
 }
 
 .plan-card__conflicts {
@@ -475,7 +544,9 @@ button:disabled {
   .capacity-row,
   .plan-card__top,
   .plan-card__meta,
-  .phase__top {
+  .phase__top,
+  .plan-card__controls,
+  .plan-editor__actions {
     flex-direction: column;
   }
 

@@ -4,9 +4,11 @@
   "description": "A coordination-first planning agent that refines rough ideas into realistic roadmaps.",
   "private": true,
   "type": "module",
+  "dependencies": {
+    "web3.storage": "^4.5.5"
+  },
   "scripts": {
     "dev": "node server.js",
     "start": "node server.js"
   }
 }
-
