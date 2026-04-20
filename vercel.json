@@ -13,8 +13,8 @@
       "destination": "/public/styles.css"
     },
     {
-      "source": "/src/(.*)",
-      "destination": "/src/$1"
+      "source": "/planner-core.js",
+      "destination": "/public/planner-core.js"
     }
   ]
 }

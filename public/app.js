@@ -1,4 +1,4 @@
-import { applyPlanEdits, createDefaultState, createPlan, rebalanceState } from "/src/planner.js";
+import { applyPlanEdits, createDefaultState, createPlan, rebalanceState } from "/planner-core.js";
 
 const storageKey = "co-ordinate-state";
 
@@ -17,6 +17,9 @@ const elements = {
   weeklyCapacityValue: document.querySelector("#weeklyCapacityValue"),
   coordinationStatus: document.querySelector("#coordinationStatus"),
   backendStatus: document.querySelector("#backendStatus"),
+  statPlans: document.querySelector("#statPlans"),
+  statConflicts: document.querySelector("#statConflicts"),
+  statLoad: document.querySelector("#statLoad"),
   weeklyView: document.querySelector("#weeklyView"),
   plansList: document.querySelector("#plansList"),
   planCardTemplate: document.querySelector("#planCardTemplate"),
@@ -61,6 +64,14 @@ function renderCoordination(data) {
   elements.coordinationStatus.textContent =
     prefix + (alerts[0] || "No active plans yet. Add your first idea and the board will coordinate around it.");
   elements.backendStatus.textContent = `Scheduler: ${data.coordination?.schedulerBackend || "n/a"} | Storage: ${data.coordination?.storageBackend || "n/a"}`;
+
+  const openConflicts = (data.plans || []).reduce((count, plan) => count + (plan.conflicts?.length || 0), 0);
+  const activePlans = (data.plans || []).filter((plan) => plan.status === "active").length;
+  const nextWeek = data.coordination?.weeklyView?.[0];
+
+  elements.statPlans.textContent = String(activePlans);
+  elements.statConflicts.textContent = String(openConflicts);
+  elements.statLoad.textContent = nextWeek ? `${nextWeek.totalHours}h` : "0h";
 }
 
 function renderWeeklyView(data) {
@@ -102,7 +113,7 @@ function renderMilestone(milestone, tasks) {
       </div>
       <div class="phase__schedule">${escapeHtml(milestone.dateRange || "Not scheduled yet")}</div>
     </div>
-    <ul>${relatedTasks.map((task) => `<li>${escapeHtml(task.title)} • ${task.effortHours}h • ${escapeHtml(task.priority)}</li>`).join("")}</ul>
+    <ul>${relatedTasks.map((task) => `<li>${escapeHtml(task.title)} | ${task.effortHours}h | ${escapeHtml(task.priority)}</li>`).join("")}</ul>
   `;
 
   return milestoneElement;
@@ -142,7 +153,7 @@ function buildHistoryMarkup(history) {
       return `
         <div class="history-item">
           <strong>v${escapeHtml(version.versionNumber)}</strong>
-          <p>${escapeHtml(version.changeType)} • ${escapeHtml(version.note)}</p>
+          <p>${escapeHtml(version.changeType)} | ${escapeHtml(version.note)}</p>
           <p>${cidMarkup}</p>
         </div>
       `;
@@ -252,7 +263,7 @@ function renderPlans(data) {
     const editorOpen = state.editorPlanId === plan.id;
 
     card.style.animationDelay = `${index * 45}ms`;
-    category.textContent = `${plan.idea?.category || "General"} • ${plan.status}`;
+    category.textContent = `${plan.idea?.category || "General"} | ${plan.status}`;
     title.textContent = plan.title;
     range.textContent = plan.dateRange;
     summary.textContent = plan.summary;

@@ -11,16 +11,30 @@
       <header class="hero">
         <div class="hero-copy">
           <p class="eyebrow">Co-ordinate</p>
-          <h1>Your idea inbox, planner, and clash detector in one place.</h1>
+          <h1>Turn rough ideas into a real execution board.</h1>
           <p class="hero-text">
-            Drop in a messy thought. Co-ordinate refines it, turns it into a realistic roadmap, and checks whether it
-            actually fits beside everything else you already want to do.
+            Capture the messy thought, structure it into a roadmap, schedule the work, and keep every plan from
+            colliding with the rest of your week.
           </p>
         </div>
         <div class="hero-panel">
           <div class="hero-panel__label">Coordination rule</div>
           <p id="coordinationStatus">Loading your board...</p>
           <p class="hero-panel__support" id="backendStatus"></p>
+          <div class="snapshot-grid">
+            <article class="snapshot-card">
+              <span class="meta-label">Active plans</span>
+              <strong id="statPlans">0</strong>
+            </article>
+            <article class="snapshot-card">
+              <span class="meta-label">Open conflicts</span>
+              <strong id="statConflicts">0</strong>
+            </article>
+            <article class="snapshot-card">
+              <span class="meta-label">Next week load</span>
+              <strong id="statLoad">0h</strong>
+            </article>
+          </div>
         </div>
       </header>
 

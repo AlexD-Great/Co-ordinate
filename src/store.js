@@ -1,13 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
-
 import { createDefaultState, createPlan, rebalanceState } from "./planner.js";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const dataDir = path.join(__dirname, "..", "data");
-const statePath = path.join(dataDir, "plans.json");
+import { dataDir, statePath } from "./runtime-paths.js";
 
 async function ensureStateFile() {
   await mkdir(dataDir, { recursive: true });

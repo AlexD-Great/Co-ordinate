@@ -1,11 +1,8 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { archiveDir } from "./runtime-paths.js";
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const archiveDir = path.join(__dirname, "..", "data", "archive");
 const web3StorageToken = process.env.WEB3_STORAGE_TOKEN?.trim();
 
 const base32Alphabet = "abcdefghijklmnopqrstuvwxyz234567";

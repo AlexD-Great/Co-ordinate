@@ -85,19 +85,24 @@ Rules:
 Current stack:
 - Node.js built-in `http` server
 - Vanilla HTML, CSS, and JavaScript
-- JSON file persistence in `data/plans.json`
-- Local content-addressed snapshot archive in `data/archive/`
+- JSON file persistence in a configurable data directory
+- Local content-addressed snapshot archive in a configurable archive directory
 - `web3.storage` package for the first external IPFS/Filecoin adapter path
+- Render web service blueprint for the preferred deployed MVP path
 
 Current key files:
 - [.env.example](/c:/Users/shelby/Desktop/Co-ordinate/.env.example): environment variables for external storage setup
+- [render.yaml](/c:/Users/shelby/Desktop/Co-ordinate/render.yaml): Render blueprint for the canonical deployed MVP
 - [server.js](/c:/Users/shelby/Desktop/Co-ordinate/server.js): HTTP server and API routes
-- [src/planner.js](/c:/Users/shelby/Desktop/Co-ordinate/src/planner.js): domain models, planning engine, conflict engine, scheduling engine
+- [src/api-router.js](/c:/Users/shelby/Desktop/Co-ordinate/src/api-router.js): shared API route handler used by the Node server and Vercel function entrypoint
+- [src/planner.js](/c:/Users/shelby/Desktop/Co-ordinate/src/planner.js): server-side export bridge for the shared planner module
 - [src/coordinator.js](/c:/Users/shelby/Desktop/Co-ordinate/src/coordinator.js): orchestration, versioning, reschedule workflow
 - [src/archive.js](/c:/Users/shelby/Desktop/Co-ordinate/src/archive.js): local content-addressed snapshot writer
+- [src/runtime-paths.js](/c:/Users/shelby/Desktop/Co-ordinate/src/runtime-paths.js): runtime data-path resolver for local dev and Render persistent disks
 - [src/store.js](/c:/Users/shelby/Desktop/Co-ordinate/src/store.js): fast local state store
 - [public/index.html](/c:/Users/shelby/Desktop/Co-ordinate/public/index.html): UI shell
 - [public/app.js](/c:/Users/shelby/Desktop/Co-ordinate/public/app.js): client workflow
+- [public/planner-core.js](/c:/Users/shelby/Desktop/Co-ordinate/public/planner-core.js): browser-safe shared planning engine
 - [public/styles.css](/c:/Users/shelby/Desktop/Co-ordinate/public/styles.css): presentation
 
 ## 4. System Architecture
@@ -121,6 +126,7 @@ Current status:
 ### Backend
 
 Current API surface:
+- `GET /health`
 - `GET /api/state`
 - `GET /api/conflicts`
 - `POST /api/refine-idea`
@@ -168,8 +174,8 @@ Current scheduler backend:
 ### Storage Layer
 
 Current behavior:
-- Working state is stored in `data/plans.json`
-- Historical snapshots are written to `data/archive/<cid>.json`
+- Working state is stored in `plans.json` under `CO_ORDINATE_DATA_DIR` when that variable is set
+- Historical snapshots are written to `archive/<cid>.json` under the same data directory
 - Every snapshot produces a `StorageReference`
 - Every persisted plan change creates a `PlanVersion`
 - When `WEB3_STORAGE_TOKEN` is present, snapshot persistence now attempts a Web3.Storage upload first and falls back to the local archive if the remote upload is unavailable
@@ -179,6 +185,11 @@ Current storage backend:
 
 Runtime-capable external backend:
 - `web3-storage`
+
+Preferred deployed MVP runtime:
+- Render web service running the full Node app
+- Render persistent disk mounted at `/var/data`
+- `CO_ORDINATE_DATA_DIR=/var/data/co-ordinate`
 
 ## 5. Flow Integration
 
@@ -431,29 +442,33 @@ Done:
 - Added user-driven plan editing from the UI.
 - Plan edits now trigger automatic recalculation and rescheduling.
 - Recent version history is now visible inside each plan card.
+- The shared planner logic now lives in `public/planner-core.js`, which keeps the browser bundle deploy-safe.
+- API routing is now shared through `src/api-router.js`, with a Vercel-compatible handler in `api/[...route].js`.
+- Added Render-first deployment support through `render.yaml`, a `/health` endpoint, and configurable runtime storage paths for persistent disks.
 
 In progress:
 - README is now being used as the project memory contract.
 - The architecture is aligned around Flow-first scheduling and Filecoin/IPFS-backed permanent storage, but scheduling is still local-adapter based and remote storage needs real credential verification.
+- The deployed MVP is moving away from Vercel as the primary runtime and toward a single Render-hosted Node service with persistent storage.
 
 Not done yet:
 - Real Flow scheduled transaction integration
 - Verified production-grade Web3.Storage / Filecoin persistence
 - Real AI idea refinement
+- Verified Render deployment with persistent writes across restarts
 
 ## 11. Next Step
 
 Exact next action:
-- Extract the current scheduling behavior into a dedicated Flow adapter module:
-  move create/cancel/reissue scheduling operations behind a replaceable adapter so the local scheduler can be swapped for real Flow transaction calls without touching the rest of the app.
+- Create or sync the Render web service from `render.yaml`, attach the persistent disk, and verify that creating and editing plans survives a restart.
 
 Why this is next:
-- The planning and editing loop is now strong enough that scheduling is the next architectural bottleneck.
-- The current code still performs scheduling inline inside the planning domain module.
-- A dedicated adapter is the cleanest path toward real Flow integration while keeping today’s local behavior working.
+- The current product problem is deployment integrity, not planning logic.
+- Co-ordinate already has a working local execution loop, but the MVP needs a runtime that can persist writes.
+- Render with a persistent disk is the fastest way to make the live product real without rewriting the storage model first.
 
 After that:
-- Verify the Web3.Storage path with a real `WEB3_STORAGE_TOKEN` and then connect the new scheduler adapter to real Flow transaction creation and cancellation.
+- Verify the Web3.Storage path with a real `WEB3_STORAGE_TOKEN`, then extract the scheduler into a dedicated Flow adapter and replace the local scheduling backend.
 
 ## 12. Implementation Checklist
 
@@ -473,8 +488,10 @@ After that:
 - [x] Use README as project memory
 - [x] Document current vs target architecture honestly
 - [x] Add an environment-gated Web3.Storage adapter path with local fallback
+- [x] Add Render-first deployment config for a persistent-disk MVP runtime
 
 ### Still Missing
+- [ ] Sync `render.yaml` to the paid Render account and verify persistent writes
 - [ ] Verify Web3.Storage uploads with a real token and remote CID
 - [ ] Extract scheduling into a dedicated Flow adapter module
 - [ ] Replace the local scheduler adapter with real Flow integration
@@ -522,10 +539,14 @@ Then open `http://localhost:3000`.
 
 ## Environment
 
-Optional for remote snapshot uploads:
+Runtime variables:
 
 ```bash
+CO_ORDINATE_DATA_DIR=/absolute/path/to/persistent/data
 WEB3_STORAGE_TOKEN=your_token_here
 ```
 
-If this variable is not present, Co-ordinate continues using the local snapshot archive.
+Notes:
+- If `CO_ORDINATE_DATA_DIR` is not present, Co-ordinate stores working state under the repo-local `data/` directory.
+- If `WEB3_STORAGE_TOKEN` is not present, Co-ordinate continues using the local snapshot archive.
+- For Render, mount the persistent disk at `/var/data` and set `CO_ORDINATE_DATA_DIR=/var/data/co-ordinate`.

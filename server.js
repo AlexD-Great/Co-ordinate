@@ -3,15 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import {
-  createPlanWorkflow,
-  getPlanHistoryWorkflow,
-  reschedulePlanWorkflow,
-  updatePlanWorkflow,
-  updateSettingsWorkflow,
-} from "./src/coordinator.js";
-import { readState, writeState } from "./src/store.js";
-import { createDefaultState, createPlan, rebalanceState, refineIdea } from "./src/planner.js";
+import { handleApiRequest } from "./src/api-router.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -78,169 +70,27 @@ async function serveStatic(requestPath, response) {
   }
 }
 
-function matchPlanHistory(pathname) {
-  return pathname.match(/^\/api\/plans\/([^/]+)\/history$/);
-}
-
-function matchPlanReschedule(pathname) {
-  return pathname.match(/^\/api\/plans\/([^/]+)\/reschedule$/);
-}
-
-function matchPlan(pathname) {
-  return pathname.match(/^\/api\/plans\/([^/]+)$/);
-}
-
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host}`);
 
-  if (request.method === "GET" && url.pathname === "/api/state") {
-    const state = await readState();
-    sendJson(response, 200, state);
+  if (request.method === "GET" && url.pathname === "/health") {
+    sendJson(response, 200, { ok: true, service: "co-ordinate" });
     return;
   }
 
-  if (request.method === "GET" && url.pathname === "/api/conflicts") {
-    const state = await readState();
-    const conflicts = state.plans.flatMap((plan) => plan.conflicts.map((conflict) => ({ ...conflict, planTitle: plan.title })));
-    sendJson(response, 200, { conflicts, count: conflicts.length });
-    return;
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/refine-idea") {
+  if (url.pathname.startsWith("/api/")) {
     try {
       const body = await parseBody(request);
-      const rawIdea = typeof body.rawIdea === "string" ? body.rawIdea.trim() : "";
-
-      if (!rawIdea) {
-        sendError(response, 400, "Share at least a rough idea to refine.");
-        return;
-      }
-
-      sendJson(response, 200, { idea: refineIdea(rawIdea) });
+      const result = await handleApiRequest({
+        method: request.method,
+        pathname: url.pathname,
+        body,
+      });
+      sendJson(response, result.statusCode, result.payload);
     } catch (error) {
-      sendError(response, 400, error.message || "Unable to refine the idea.");
+      sendError(response, 400, error.message || "Unable to process the API request.");
     }
 
-    return;
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/generate-roadmap") {
-    try {
-      const body = await parseBody(request);
-      const rawIdea = typeof body.rawIdea === "string" ? body.rawIdea.trim() : "";
-
-      if (!rawIdea) {
-        sendError(response, 400, "Share at least a rough idea to turn into a roadmap.");
-        return;
-      }
-
-      sendJson(response, 200, { plan: createPlan(rawIdea) });
-    } catch (error) {
-      sendError(response, 400, error.message || "Unable to generate a roadmap.");
-    }
-
-    return;
-  }
-
-  if (request.method === "POST" && (url.pathname === "/api/plans" || url.pathname === "/api/ideas")) {
-    try {
-      const body = await parseBody(request);
-      const rawIdea = typeof body.rawIdea === "string" ? body.rawIdea.trim() : "";
-
-      if (!rawIdea) {
-        sendError(response, 400, "Share at least a rough idea to plan against.");
-        return;
-      }
-
-      const state = await readState();
-      const nextState = await createPlanWorkflow(state, rawIdea);
-
-      await writeState(nextState);
-      sendJson(response, 201, nextState);
-    } catch (error) {
-      sendError(response, 400, error.message || "Unable to create a plan.");
-    }
-
-    return;
-  }
-
-  if (request.method === "POST" && url.pathname === "/api/settings") {
-    try {
-      const body = await parseBody(request);
-      const weeklyCapacity = Number(body.weeklyCapacity);
-
-      if (!Number.isFinite(weeklyCapacity) || weeklyCapacity < 4 || weeklyCapacity > 60) {
-        sendError(response, 400, "Weekly capacity must be between 4 and 60 hours.");
-        return;
-      }
-
-      const state = await readState();
-      const nextState = await updateSettingsWorkflow(state, { weeklyCapacity });
-
-      await writeState(nextState);
-      sendJson(response, 200, nextState);
-    } catch (error) {
-      sendError(response, 400, error.message || "Unable to update settings.");
-    }
-
-    return;
-  }
-
-  const planMatch = matchPlan(url.pathname);
-  if (request.method === "PATCH" && planMatch) {
-    try {
-      const [, planId] = planMatch;
-      const body = await parseBody(request);
-      const state = await readState();
-
-      if (!state.plans.some((plan) => plan.id === planId)) {
-        sendError(response, 404, "Plan not found.");
-        return;
-      }
-
-      const nextState = await updatePlanWorkflow(state, planId, body);
-      await writeState(nextState);
-      sendJson(response, 200, nextState);
-    } catch (error) {
-      sendError(response, 400, error.message || "Unable to update the plan.");
-    }
-
-    return;
-  }
-
-  const historyMatch = matchPlanHistory(url.pathname);
-  if (request.method === "GET" && historyMatch) {
-    const [, planId] = historyMatch;
-    const state = await readState();
-    const history = getPlanHistoryWorkflow(state, planId);
-    sendJson(response, 200, { history });
-    return;
-  }
-
-  const rescheduleMatch = matchPlanReschedule(url.pathname);
-  if (request.method === "POST" && rescheduleMatch) {
-    try {
-      const [, planId] = rescheduleMatch;
-      const body = await parseBody(request);
-      const state = await readState();
-
-      if (!state.plans.some((plan) => plan.id === planId)) {
-        sendError(response, 404, "Plan not found.");
-        return;
-      }
-
-      const nextState = await reschedulePlanWorkflow(state, planId, body.note || "Manual reschedule requested.");
-      await writeState(nextState);
-      sendJson(response, 200, nextState);
-    } catch (error) {
-      sendError(response, 400, error.message || "Unable to reschedule the plan.");
-    }
-
-    return;
-  }
-
-  if (request.method === "GET" && url.pathname === "/api/bootstrap") {
-    sendJson(response, 200, { state: rebalanceState(createDefaultState()) });
     return;
   }
 
