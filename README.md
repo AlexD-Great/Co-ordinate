@@ -456,26 +456,25 @@ Done:
 In progress:
 - README is now being used as the project memory contract.
 - The architecture is aligned around Flow-first scheduling and Filecoin/IPFS-backed permanent storage, but scheduling is still local-adapter based and remote storage needs real credential verification.
-- The deployed MVP is moving away from Vercel as the primary runtime and toward a single Render-hosted Node service with persistent storage.
+- The deployed MVP is now running on a single Render-hosted Node service with verified persistent storage.
 
 Not done yet:
 - Real Flow scheduled transaction integration
 - Verified production-grade Web3.Storage / Filecoin persistence
 - Real AI idea refinement
-- Verified Render deployment with persistent writes across restarts
 
 ## 11. Next Step
 
 Exact next action:
-- Verify the live Render service persists plan creation and edits across refresh, redeploy, and restart now that the local scheduler boundary is in place.
+- Verify the Web3.Storage path with a real `WEB3_STORAGE_TOKEN` and confirm that remote CIDs are being produced from live plan snapshots.
 
 Why this is next:
-- The next product risk is live persistence, not local architecture.
-- Co-ordinate now has a cleaner scheduling boundary for future Flow work, so the most valuable follow-up is proving the hosted app actually keeps user data.
-- Once live persistence is verified, the next major product step can move to AI refinement instead of more infrastructure cleanup.
+- Render persistence is now proven, so the next storage risk is remote archival rather than local durability.
+- Co-ordinate already creates versioned snapshots, so verifying remote CID generation is the clearest way to advance the Filecoin/IPFS side of the architecture.
+- Once remote archival is proven, the next major product step can move to the real AI refinement layer.
 
 After that:
-- Verify the Web3.Storage path with a real `WEB3_STORAGE_TOKEN`, then begin the real AI refinement layer while keeping the local scheduler ready for a future Flow replacement.
+- Begin the real AI refinement layer while keeping the local scheduler ready for a future Flow replacement.
 
 ## 12. Implementation Checklist
 
@@ -499,7 +498,7 @@ After that:
 - [x] Extract scheduling into a dedicated local Flow adapter module
 
 ### Still Missing
-- [ ] Sync `render.yaml` to the paid Render account and verify persistent writes
+- [x] Sync `render.yaml` to the paid Render account and verify persistent writes
 - [ ] Verify Web3.Storage uploads with a real token and remote CID
 - [ ] Replace the local scheduler adapter with real Flow integration
 - [ ] Add real AI planner/refinement layer
