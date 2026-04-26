@@ -1,6 +1,6 @@
 # Co-ordinate
 
-Last updated: 2026-04-18
+Last updated: 2026-04-26
 
 This README is the single source of truth for the Co-ordinate project.
 
@@ -103,6 +103,7 @@ Current key files:
 - [public/index.html](/c:/Users/shelby/Desktop/Co-ordinate/public/index.html): UI shell
 - [public/app.js](/c:/Users/shelby/Desktop/Co-ordinate/public/app.js): client workflow
 - [public/planner-core.js](/c:/Users/shelby/Desktop/Co-ordinate/public/planner-core.js): browser-safe shared planning engine
+- [public/flow-forte-local-adapter.js](/c:/Users/shelby/Desktop/Co-ordinate/public/flow-forte-local-adapter.js): dedicated local scheduling adapter that mirrors the future Flow boundary
 - [public/styles.css](/c:/Users/shelby/Desktop/Co-ordinate/public/styles.css): presentation
 
 ## 4. System Architecture
@@ -146,7 +147,7 @@ Responsibilities:
 - Maintain roadmap structure that can later map to Flow execution
 
 Current status:
-- Implemented deterministically in `src/planner.js`
+- Implemented deterministically in `public/planner-core.js`
 - No live LLM integration yet
 
 ### Conflict Engine
@@ -170,6 +171,10 @@ Current behavior:
 
 Current scheduler backend:
 - `flow-forte-local-adapter`
+
+Current implementation shape:
+- The scheduling behavior now lives in a dedicated adapter module at `public/flow-forte-local-adapter.js`
+- `public/planner-core.js` now consumes the adapter instead of embedding schedule logic inline
 
 ### Storage Layer
 
@@ -199,6 +204,7 @@ Design commitment:
 
 What exists now:
 - Scheduler backend contract is already present in the plan model.
+- The local scheduler now lives behind a dedicated adapter module instead of inside the planner core.
 - Each task becomes a `ScheduleEvent`.
 - Reschedule workflows already follow:
   cancel previous schedule references -> issue new schedule references -> keep history.
@@ -443,6 +449,7 @@ Done:
 - Plan edits now trigger automatic recalculation and rescheduling.
 - Recent version history is now visible inside each plan card.
 - The shared planner logic now lives in `public/planner-core.js`, which keeps the browser bundle deploy-safe.
+- The local Flow-style scheduling logic now lives in `public/flow-forte-local-adapter.js`, giving the app a real adapter boundary without introducing blockchain complexity yet.
 - API routing is now shared through `src/api-router.js`, with a Vercel-compatible handler in `api/[...route].js`.
 - Added Render-first deployment support through `render.yaml`, a `/health` endpoint, and configurable runtime storage paths for persistent disks.
 
@@ -460,15 +467,15 @@ Not done yet:
 ## 11. Next Step
 
 Exact next action:
-- Create or sync the Render web service from `render.yaml`, attach the persistent disk, and verify that creating and editing plans survives a restart.
+- Verify the live Render service persists plan creation and edits across refresh, redeploy, and restart now that the local scheduler boundary is in place.
 
 Why this is next:
-- The current product problem is deployment integrity, not planning logic.
-- Co-ordinate already has a working local execution loop, but the MVP needs a runtime that can persist writes.
-- Render with a persistent disk is the fastest way to make the live product real without rewriting the storage model first.
+- The next product risk is live persistence, not local architecture.
+- Co-ordinate now has a cleaner scheduling boundary for future Flow work, so the most valuable follow-up is proving the hosted app actually keeps user data.
+- Once live persistence is verified, the next major product step can move to AI refinement instead of more infrastructure cleanup.
 
 After that:
-- Verify the Web3.Storage path with a real `WEB3_STORAGE_TOKEN`, then extract the scheduler into a dedicated Flow adapter and replace the local scheduling backend.
+- Verify the Web3.Storage path with a real `WEB3_STORAGE_TOKEN`, then begin the real AI refinement layer while keeping the local scheduler ready for a future Flow replacement.
 
 ## 12. Implementation Checklist
 
@@ -489,11 +496,11 @@ After that:
 - [x] Document current vs target architecture honestly
 - [x] Add an environment-gated Web3.Storage adapter path with local fallback
 - [x] Add Render-first deployment config for a persistent-disk MVP runtime
+- [x] Extract scheduling into a dedicated local Flow adapter module
 
 ### Still Missing
 - [ ] Sync `render.yaml` to the paid Render account and verify persistent writes
 - [ ] Verify Web3.Storage uploads with a real token and remote CID
-- [ ] Extract scheduling into a dedicated Flow adapter module
 - [ ] Replace the local scheduler adapter with real Flow integration
 - [ ] Add real AI planner/refinement layer
 - [ ] Add execution history beyond schedule history
