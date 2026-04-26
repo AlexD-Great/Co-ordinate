@@ -217,6 +217,48 @@ button {
   gap: 1rem;
 }
 
+.runtime-status-card {
+  display: grid;
+  gap: 0.9rem;
+  margin-top: 1.25rem;
+  padding: 1rem;
+  border-radius: 18px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.runtime-status-card__top {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.runtime-status-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+.runtime-pill-card {
+  padding: 0.85rem;
+  border-radius: 16px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.62);
+}
+
+.runtime-pill-card strong {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 1rem;
+  font-family: var(--display-font);
+}
+
+.runtime-status-copy {
+  margin: 0;
+  color: var(--muted);
+}
+
 textarea {
   width: 100%;
   padding: 1.1rem 1.15rem;
@@ -549,6 +591,10 @@ button:disabled {
   }
 
   .snapshot-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .runtime-status-grid {
     grid-template-columns: 1fr;
   }
 

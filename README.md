@@ -122,6 +122,7 @@ Responsibilities:
 Current status:
 - Implemented in plain HTML/CSS/JS
 - Works against the local API
+- Shows runtime storage health, including whether persistent disk mode and Web3.Storage are configured
 - Falls back to browser storage in preview mode
 
 ### Backend
@@ -129,6 +130,7 @@ Current status:
 Current API surface:
 - `GET /health`
 - `GET /api/state`
+- `GET /api/runtime-status`
 - `GET /api/conflicts`
 - `POST /api/refine-idea`
 - `POST /api/generate-roadmap`
@@ -184,6 +186,7 @@ Current behavior:
 - Every snapshot produces a `StorageReference`
 - Every persisted plan change creates a `PlanVersion`
 - When `WEB3_STORAGE_TOKEN` is present, snapshot persistence now attempts a Web3.Storage upload first and falls back to the local archive if the remote upload is unavailable
+- The app now exposes runtime storage diagnostics through `GET /api/runtime-status` and a storage health card in the UI
 
 Current storage backend:
 - `local-content-addressed-snapshots`
@@ -440,8 +443,10 @@ Done:
 - The original local planner MVP exists.
 - The backend now has explicit domain models for idea, plan, roadmap, task, milestone, schedule event, conflict, plan version, and storage reference.
 - The API now exposes refinement, roadmap generation, conflict retrieval, rescheduling, and history retrieval routes.
+- The API now exposes runtime storage readiness through `/api/runtime-status`.
 - Version snapshots are now created and stored through a content-addressed storage adapter.
 - The frontend now renders the richer plan structure, backend status, and conflict cards.
+- The frontend now shows storage health, including persistent disk readiness, archive mode, and whether Web3.Storage is waiting for its first CID.
 - Legacy local plan data is migrated into the new plan shape on read.
 - The storage adapter now supports an environment-gated Web3.Storage upload path with automatic local fallback.
 - Added `.env.example` and UI support for clickable remote snapshot CIDs.
@@ -470,7 +475,7 @@ Exact next action:
 
 Why this is next:
 - Render persistence is now proven, so the next storage risk is remote archival rather than local durability.
-- Co-ordinate already creates versioned snapshots, so verifying remote CID generation is the clearest way to advance the Filecoin/IPFS side of the architecture.
+- Co-ordinate already creates versioned snapshots and now reports storage readiness in the UI, so verifying remote CID generation is the clearest way to advance the Filecoin/IPFS side of the architecture.
 - Once remote archival is proven, the next major product step can move to the real AI refinement layer.
 
 After that:

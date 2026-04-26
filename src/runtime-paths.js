@@ -6,6 +6,7 @@ const __dirname = path.dirname(__filename);
 
 const defaultDataDir = path.join(__dirname, "..", "data");
 
+export const hasCustomDataDir = Boolean(process.env.CO_ORDINATE_DATA_DIR?.trim());
 export const dataDir = process.env.CO_ORDINATE_DATA_DIR?.trim() || defaultDataDir;
 export const archiveDir = path.join(dataDir, "archive");
 export const statePath = path.join(dataDir, "plans.json");

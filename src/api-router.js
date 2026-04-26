@@ -5,6 +5,8 @@ import {
   updatePlanWorkflow,
   updateSettingsWorkflow,
 } from "./coordinator.js";
+import { getArchiveRuntimeStatus } from "./archive.js";
+import { hasCustomDataDir } from "./runtime-paths.js";
 import { readState, writeState } from "./store.js";
 import { createDefaultState, createPlan, rebalanceState, refineIdea } from "./planner.js";
 
@@ -28,10 +30,39 @@ function badRequest(message) {
   return json(400, { error: message });
 }
 
+function buildRuntimeStatus(state) {
+  const archiveStatus = getArchiveRuntimeStatus();
+  const storageReferences = state.storageReferences || [];
+  const remoteSnapshots = storageReferences.filter((reference) => reference.backend === "web3-storage").length;
+  const localSnapshots = storageReferences.filter((reference) => reference.backend === "local-content-addressed-snapshots").length;
+
+  return {
+    schedulerBackend: state.coordination?.schedulerBackend || state.settings?.schedulerBackend || "n/a",
+    storageBackend: state.coordination?.storageBackend || state.settings?.storageBackend || "n/a",
+    persistentDataConfigured: hasCustomDataDir,
+    persistenceMode: hasCustomDataDir ? "persistent-disk" : "repo-local-data",
+    web3StorageTokenConfigured: archiveStatus.tokenConfigured,
+    preferredArchiveBackend: archiveStatus.preferredBackend,
+    remoteSnapshots,
+    localSnapshots,
+    remoteArchivalVerified: remoteSnapshots > 0,
+    recommendation: archiveStatus.tokenConfigured
+      ? remoteSnapshots > 0
+        ? "Remote snapshot storage is active. New versions should keep producing live CIDs."
+        : "Web3.Storage is configured. Create or edit a plan to produce the first remote CID."
+      : "Add WEB3_STORAGE_TOKEN to enable remote Filecoin/IPFS snapshots.",
+  };
+}
+
 export async function handleApiRequest({ method, pathname, body = {} }) {
   if (method === "GET" && pathname === "/api/state") {
     const state = await readState();
     return json(200, state);
+  }
+
+  if (method === "GET" && pathname === "/api/runtime-status") {
+    const state = await readState();
+    return json(200, { runtime: buildRuntimeStatus(state) });
   }
 
   if (method === "GET" && pathname === "/api/conflicts") {

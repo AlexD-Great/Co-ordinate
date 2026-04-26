@@ -8,6 +8,14 @@ const web3StorageToken = process.env.WEB3_STORAGE_TOKEN?.trim();
 const base32Alphabet = "abcdefghijklmnopqrstuvwxyz234567";
 let web3StorageModulePromise = null;
 
+export function getArchiveRuntimeStatus() {
+  return {
+    tokenConfigured: Boolean(web3StorageToken),
+    preferredBackend: web3StorageToken ? "web3-storage" : "local-content-addressed-snapshots",
+    gatewayBaseUrl: web3StorageToken ? "https://dweb.link/ipfs/" : null,
+  };
+}
+
 function encodeVarint(value) {
   const bytes = [];
   let remaining = value;

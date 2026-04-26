@@ -6,6 +6,7 @@ const state = {
   data: null,
   mode: "api",
   editorPlanId: null,
+  runtime: null,
 };
 
 const elements = {
@@ -15,6 +16,9 @@ const elements = {
   settingsForm: document.querySelector("#settingsForm"),
   weeklyCapacity: document.querySelector("#weeklyCapacity"),
   weeklyCapacityValue: document.querySelector("#weeklyCapacityValue"),
+  runtimePersistence: document.querySelector("#runtimePersistence"),
+  runtimeArchive: document.querySelector("#runtimeArchive"),
+  runtimeRecommendation: document.querySelector("#runtimeRecommendation"),
   coordinationStatus: document.querySelector("#coordinationStatus"),
   backendStatus: document.querySelector("#backendStatus"),
   statPlans: document.querySelector("#statPlans"),
@@ -72,6 +76,30 @@ function renderCoordination(data) {
   elements.statPlans.textContent = String(activePlans);
   elements.statConflicts.textContent = String(openConflicts);
   elements.statLoad.textContent = nextWeek ? `${nextWeek.totalHours}h` : "0h";
+}
+
+function renderRuntimeStatus() {
+  if (state.mode === "local") {
+    elements.runtimePersistence.textContent = "Browser preview";
+    elements.runtimeArchive.textContent = "Local snapshots only";
+    elements.runtimeRecommendation.textContent = "The API is unavailable here, so runtime storage checks are limited in preview mode.";
+    return;
+  }
+
+  if (!state.runtime) {
+    elements.runtimePersistence.textContent = "Checking...";
+    elements.runtimeArchive.textContent = "Checking...";
+    elements.runtimeRecommendation.textContent = "Checking backend readiness...";
+    return;
+  }
+
+  elements.runtimePersistence.textContent = state.runtime.persistentDataConfigured ? "Persistent disk ready" : "Repo-local data";
+  elements.runtimeArchive.textContent = state.runtime.web3StorageTokenConfigured
+    ? state.runtime.remoteArchivalVerified
+      ? `${state.runtime.remoteSnapshots} remote CID${state.runtime.remoteSnapshots === 1 ? "" : "s"}`
+      : "Token ready, waiting for first CID"
+    : `${state.runtime.localSnapshots} local snapshot${state.runtime.localSnapshots === 1 ? "" : "s"}`;
+  elements.runtimeRecommendation.textContent = state.runtime.recommendation;
 }
 
 function renderWeeklyView(data) {
@@ -344,6 +372,7 @@ function render(data) {
   state.data = data;
   elements.weeklyCapacity.value = String(data.settings?.weeklyCapacity || 12);
   setCapacityLabel(elements.weeklyCapacity.value);
+  renderRuntimeStatus();
   renderCoordination(data);
   renderWeeklyView(data);
   renderPlans(data);
@@ -367,21 +396,36 @@ async function loadState() {
   try {
     const data = await requestJson("/api/state");
     state.mode = "api";
+    const runtimeResponse = await requestJson("/api/runtime-status");
+    state.runtime = runtimeResponse.runtime;
     render(data);
   } catch {
     state.mode = "local";
+    state.runtime = null;
     const data = readLocalState();
     writeLocalState(data);
     render(data);
   }
 }
 
+async function refreshRuntimeStatus() {
+  if (state.mode !== "api") {
+    state.runtime = null;
+    return;
+  }
+
+  const runtimeResponse = await requestJson("/api/runtime-status");
+  state.runtime = runtimeResponse.runtime;
+}
+
 async function savePlanEdits(planId, patch) {
   if (state.mode === "api") {
-    return requestJson(`/api/plans/${planId}`, {
+    const data = await requestJson(`/api/plans/${planId}`, {
       method: "PATCH",
       body: JSON.stringify(patch),
     });
+    await refreshRuntimeStatus();
+    return data;
   }
 
   const current = readLocalState();
@@ -395,10 +439,12 @@ async function savePlanEdits(planId, patch) {
 
 async function triggerReschedule(planId) {
   if (state.mode === "api") {
-    return requestJson(`/api/plans/${planId}/reschedule`, {
+    const data = await requestJson(`/api/plans/${planId}/reschedule`, {
       method: "POST",
       body: JSON.stringify({ note: "Manual reschedule requested from the UI." }),
     });
+    await refreshRuntimeStatus();
+    return data;
   }
 
   const current = readLocalState();
@@ -427,6 +473,7 @@ async function handleIdeaSubmit(event) {
         method: "POST",
         body: JSON.stringify({ rawIdea }),
       });
+      await refreshRuntimeStatus();
     } else {
       const current = readLocalState();
       const plan = createPlan(rawIdea);
@@ -461,6 +508,7 @@ async function handleSettingsSubmit(event) {
         method: "POST",
         body: JSON.stringify({ weeklyCapacity }),
       });
+      await refreshRuntimeStatus();
     } else {
       const current = readLocalState();
       data = rebalanceState({

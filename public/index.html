@@ -78,6 +78,26 @@
             </div>
             <button type="submit" class="button-secondary">Rebalance roadmap load</button>
           </form>
+
+          <div class="runtime-status-card">
+            <div class="runtime-status-card__top">
+              <div>
+                <p class="section-label">Runtime</p>
+                <h3>Storage health</h3>
+              </div>
+            </div>
+            <div class="runtime-status-grid">
+              <article class="runtime-pill-card">
+                <span class="meta-label">Persistence</span>
+                <strong id="runtimePersistence">Checking...</strong>
+              </article>
+              <article class="runtime-pill-card">
+                <span class="meta-label">Archive path</span>
+                <strong id="runtimeArchive">Checking...</strong>
+              </article>
+            </div>
+            <p class="runtime-status-copy" id="runtimeRecommendation">Checking backend readiness...</p>
+          </div>
         </section>
 
         <section class="panel panel--timeline">
