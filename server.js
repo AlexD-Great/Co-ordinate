@@ -4,10 +4,12 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { handleApiRequest } from "./src/api-router.js";
+import { loadProjectEnv } from "./src/load-env.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const publicDir = path.join(__dirname, "public");
+const envLoadResult = loadProjectEnv();
 const port = Number(process.env.PORT || 3000);
 
 const contentTypes = {
@@ -99,4 +101,8 @@ const server = createServer(async (request, response) => {
 
 server.listen(port, () => {
   console.log(`Co-ordinate is running at http://localhost:${port}`);
+  console.log(`[env] NFT_STORAGE_TOKEN: ${process.env.NFT_STORAGE_TOKEN?.trim() ? "loaded" : "NOT SET"}`);
+  if (envLoadResult.blankKeys.includes("NFT_STORAGE_TOKEN")) {
+    console.log("[env] NFT_STORAGE_TOKEN is blank in .env, so only a shell or host env var can provide it.");
+  }
 });

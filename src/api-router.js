@@ -33,7 +33,7 @@ function badRequest(message) {
 function buildRuntimeStatus(state) {
   const archiveStatus = getArchiveRuntimeStatus();
   const storageReferences = state.storageReferences || [];
-  const remoteSnapshots = storageReferences.filter((reference) => reference.backend === "web3-storage").length;
+  const remoteSnapshots = storageReferences.filter((reference) => reference.backend === "nft-storage").length;
   const localSnapshots = storageReferences.filter((reference) => reference.backend === "local-content-addressed-snapshots").length;
 
   return {
@@ -41,7 +41,7 @@ function buildRuntimeStatus(state) {
     storageBackend: state.coordination?.storageBackend || state.settings?.storageBackend || "n/a",
     persistentDataConfigured: hasCustomDataDir,
     persistenceMode: hasCustomDataDir ? "persistent-disk" : "repo-local-data",
-    web3StorageTokenConfigured: archiveStatus.tokenConfigured,
+    nftStorageTokenConfigured: archiveStatus.tokenConfigured,
     preferredArchiveBackend: archiveStatus.preferredBackend,
     remoteSnapshots,
     localSnapshots,
@@ -49,8 +49,8 @@ function buildRuntimeStatus(state) {
     recommendation: archiveStatus.tokenConfigured
       ? remoteSnapshots > 0
         ? "Remote snapshot storage is active. New versions should keep producing live CIDs."
-        : "Web3.Storage is configured. Create or edit a plan to produce the first remote CID."
-      : "Add WEB3_STORAGE_TOKEN to enable remote Filecoin/IPFS snapshots.",
+        : "NFT.Storage is configured. Create or edit a plan to produce the first remote CID."
+      : "Add NFT_STORAGE_TOKEN to enable remote Filecoin/IPFS snapshots.",
   };
 }
 

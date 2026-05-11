@@ -14,5 +14,5 @@ services:
     envVars:
       - key: CO_ORDINATE_DATA_DIR
         value: /var/data/co-ordinate
-      - key: WEB3_STORAGE_TOKEN
+      - key: NFT_STORAGE_TOKEN
         sync: false

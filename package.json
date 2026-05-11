@@ -5,7 +5,8 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "web3.storage": "^4.5.5"
+    "dotenv": "^17.4.2",
+    "nft.storage": "^7.1.1"
   },
   "scripts": {
     "dev": "node server.js",

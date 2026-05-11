@@ -3,16 +3,19 @@ import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { archiveDir } from "./runtime-paths.js";
 
-const web3StorageToken = process.env.WEB3_STORAGE_TOKEN?.trim();
-
 const base32Alphabet = "abcdefghijklmnopqrstuvwxyz234567";
-let web3StorageModulePromise = null;
+let nftStorageModulePromise = null;
+
+function getNftStorageToken() {
+  return process.env.NFT_STORAGE_TOKEN?.trim() || null;
+}
 
 export function getArchiveRuntimeStatus() {
+  const token = getNftStorageToken();
   return {
-    tokenConfigured: Boolean(web3StorageToken),
-    preferredBackend: web3StorageToken ? "web3-storage" : "local-content-addressed-snapshots",
-    gatewayBaseUrl: web3StorageToken ? "https://dweb.link/ipfs/" : null,
+    tokenConfigured: Boolean(token),
+    preferredBackend: token ? "nft-storage" : "local-content-addressed-snapshots",
+    gatewayBaseUrl: token ? "https://nftstorage.link/ipfs/" : null,
   };
 }
 
@@ -65,21 +68,25 @@ function createCidFromPayload(payload) {
   return `b${toBase32(cidBytes)}`;
 }
 
-async function loadWeb3StorageModule() {
-  if (!web3StorageToken) {
+async function loadNftStorageModule() {
+  const token = getNftStorageToken();
+
+  if (!token) {
     return null;
   }
 
-  if (!web3StorageModulePromise) {
-    web3StorageModulePromise = import("web3.storage")
+  if (!nftStorageModulePromise) {
+    nftStorageModulePromise = import("nft.storage")
       .then((module) => ({
-        File: module.File,
-        client: new module.Web3Storage({ token: web3StorageToken }),
+        client: new module.NFTStorage({ token }),
       }))
-      .catch(() => null);
+      .catch((error) => {
+        console.error("[archive] Failed to load nft.storage module:", error.message);
+        return null;
+      });
   }
 
-  return web3StorageModulePromise;
+  return nftStorageModulePromise;
 }
 
 async function writeLocalArchive({ cid, payload }) {
@@ -90,25 +97,24 @@ async function writeLocalArchive({ cid, payload }) {
 }
 
 async function writeRemoteSnapshot({ planId, payload, localCid }) {
-  const web3Storage = await loadWeb3StorageModule();
+  const nftStorage = await loadNftStorageModule();
 
-  if (!web3Storage) {
+  if (!nftStorage) {
     return null;
   }
 
   const payloadText = JSON.stringify(payload, null, 2);
-  const fileName = `${planId}-${Date.now()}.json`;
-  const file = new web3Storage.File([payloadText], fileName, { type: "application/json" });
-  const cid = await web3Storage.client.put([file], { wrapWithDirectory: false });
+  const blob = new Blob([payloadText], { type: "application/json" });
+  const cid = await nftStorage.client.storeBlob(blob);
 
   return {
     id: `storage_${Math.random().toString(36).slice(2, 10)}`,
     planId,
     cid,
-    backend: "web3-storage",
+    backend: "nft-storage",
     kind: "plan-snapshot",
     filePath: null,
-    gatewayUrl: `https://dweb.link/ipfs/${cid}`,
+    gatewayUrl: `https://nftstorage.link/ipfs/${cid}`,
     localFallbackCid: localCid,
     createdAt: new Date().toISOString(),
   };
@@ -118,7 +124,7 @@ export async function writeSnapshot({ planId, payload }) {
   const cid = createCidFromPayload(payload);
   const filePath = await writeLocalArchive({ cid, payload });
 
-  if (web3StorageToken) {
+  if (getNftStorageToken()) {
     try {
       const remoteReference = await writeRemoteSnapshot({ planId, payload, localCid: cid });
 
@@ -128,8 +134,8 @@ export async function writeSnapshot({ planId, payload }) {
           filePath,
         };
       }
-    } catch {
-      // Fall back to the local adapter when remote upload is unavailable.
+    } catch (error) {
+      console.error("[archive] Remote upload failed, falling back to local:", error.message);
     }
   }
 

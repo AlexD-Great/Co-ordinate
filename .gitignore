@@ -4,3 +4,4 @@ Thumbs.db
 data/*.json
 data/archive/
 .render-data/
+.env

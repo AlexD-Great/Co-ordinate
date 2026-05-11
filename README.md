@@ -1,6 +1,6 @@
 # Co-ordinate
 
-Last updated: 2026-04-26
+Last updated: 2026-05-11
 
 This README is the single source of truth for the Co-ordinate project.
 
@@ -58,7 +58,7 @@ Important truth:
 
 Target architecture:
 - Active working state lives in a fast local database or free-tier database.
-- Long-term memory lives in Filecoin-backed storage through Web3.Storage / IPFS.
+- Long-term memory lives in Filecoin-backed storage through NFT.Storage / IPFS.
 - Roadmap snapshots, version history, conflict logs, and execution history should all be persisted with a CID and referenced in the app database.
 
 Current implementation status:
@@ -67,7 +67,7 @@ Current implementation status:
 - Each snapshot receives a CID-shaped content identifier and is tracked through a `StorageReference`.
 
 Important truth:
-- Real Web3.Storage / Filecoin upload is not wired yet.
+- Real NFT.Storage / Filecoin upload is not wired yet.
 - The current adapter is a local stand-in that preserves the same persistence contract the real storage layer will use.
 
 ### Free-Tier Rule
@@ -87,13 +87,14 @@ Current stack:
 - Vanilla HTML, CSS, and JavaScript
 - JSON file persistence in a configurable data directory
 - Local content-addressed snapshot archive in a configurable archive directory
-- `web3.storage` package for the first external IPFS/Filecoin adapter path
+- `nft.storage` package for the IPFS/Filecoin adapter path
 - Render web service blueprint for the preferred deployed MVP path
 
 Current key files:
 - [.env.example](/c:/Users/shelby/Desktop/Co-ordinate/.env.example): environment variables for external storage setup
 - [render.yaml](/c:/Users/shelby/Desktop/Co-ordinate/render.yaml): Render blueprint for the canonical deployed MVP
 - [server.js](/c:/Users/shelby/Desktop/Co-ordinate/server.js): HTTP server and API routes
+- [src/load-env.js](/c:/Users/shelby/Desktop/Co-ordinate/src/load-env.js): safe project env loader that only imports non-empty values from `.env`
 - [src/api-router.js](/c:/Users/shelby/Desktop/Co-ordinate/src/api-router.js): shared API route handler used by the Node server and Vercel function entrypoint
 - [src/planner.js](/c:/Users/shelby/Desktop/Co-ordinate/src/planner.js): server-side export bridge for the shared planner module
 - [src/coordinator.js](/c:/Users/shelby/Desktop/Co-ordinate/src/coordinator.js): orchestration, versioning, reschedule workflow
@@ -122,7 +123,7 @@ Responsibilities:
 Current status:
 - Implemented in plain HTML/CSS/JS
 - Works against the local API
-- Shows runtime storage health, including whether persistent disk mode and Web3.Storage are configured
+- Shows runtime storage health, including whether persistent disk mode and NFT.Storage are configured
 - Falls back to browser storage in preview mode
 
 ### Backend
@@ -185,14 +186,15 @@ Current behavior:
 - Historical snapshots are written to `archive/<cid>.json` under the same data directory
 - Every snapshot produces a `StorageReference`
 - Every persisted plan change creates a `PlanVersion`
-- When `WEB3_STORAGE_TOKEN` is present, snapshot persistence now attempts a Web3.Storage upload first and falls back to the local archive if the remote upload is unavailable
+- When `NFT_STORAGE_TOKEN` is present, snapshot persistence now attempts an NFT.Storage upload first and falls back to the local archive if the remote upload is unavailable
 - The app now exposes runtime storage diagnostics through `GET /api/runtime-status` and a storage health card in the UI
+- Blank values in `.env` no longer override valid shell or host environment variables
 
 Current storage backend:
 - `local-content-addressed-snapshots`
 
 Runtime-capable external backend:
-- `web3-storage`
+- `nft-storage`
 
 Preferred deployed MVP runtime:
 - Render web service running the full Node app
@@ -225,7 +227,7 @@ Implementation boundary:
 
 Target split:
 - Fast access state: local database or free-tier DB
-- Permanent memory: Filecoin-backed storage via Web3.Storage / IPFS
+- Permanent memory: Filecoin-backed storage via NFT.Storage / IPFS
 
 Data intended for long-term storage:
 - Plan snapshots
@@ -238,17 +240,16 @@ What exists now:
 - Snapshot payloads are already content-addressed
 - A CID is generated for each persisted snapshot
 - The app database tracks those storage references
-- `src/archive.js` now includes an environment-gated Web3.Storage upload path through `WEB3_STORAGE_TOKEN`
+- `src/archive.js` now includes an environment-gated NFT.Storage upload path through `NFT_STORAGE_TOKEN`
 - If the remote upload succeeds, the returned remote CID becomes the canonical `StorageReference.cid`
 - If the remote upload fails or no token is configured, the system falls back to the local archive path without breaking the MVP
+- web3.storage (old client) was replaced with nft.storage after web3.storage migrated to Storacha, which dropped token-based auth
 
 What is missing:
-- Verified end-to-end upload against a real Web3.Storage account in this repo
-- A production-ready credentials and account setup story
-- A decision on whether to keep the current token-driven bridge or migrate to the newer Web3.Storage client stack after verification
+- Verified end-to-end upload against a real NFT.Storage account in this repo
 
 Implementation boundary:
-- Keep the current `StorageReference` contract and swap the persistence backend from local archive files to Web3.Storage.
+- Keep the current `StorageReference` contract and swap the persistence backend from local archive files to NFT.Storage.
 
 ## 7. Data Model
 
@@ -417,7 +418,7 @@ Status: next major build phase
 
 Goals:
 - replace local scheduler adapter with real Flow integration
-- replace local snapshot archive with Web3.Storage upload
+- replace local snapshot archive with NFT.Storage upload
 - keep the same internal contracts
 
 ### Phase 3: AI Planning Layer
@@ -446,10 +447,12 @@ Done:
 - The API now exposes runtime storage readiness through `/api/runtime-status`.
 - Version snapshots are now created and stored through a content-addressed storage adapter.
 - The frontend now renders the richer plan structure, backend status, and conflict cards.
-- The frontend now shows storage health, including persistent disk readiness, archive mode, and whether Web3.Storage is waiting for its first CID.
+- The frontend now shows storage health, including persistent disk readiness, archive mode, and whether NFT.Storage is waiting for its first CID.
 - Legacy local plan data is migrated into the new plan shape on read.
-- The storage adapter now supports an environment-gated Web3.Storage upload path with automatic local fallback.
+- The storage adapter now supports an environment-gated NFT.Storage upload path with automatic local fallback.
 - Added `.env.example` and UI support for clickable remote snapshot CIDs.
+- Replaced `web3.storage` package with `nft.storage` after web3.storage migrated away from token-based auth (now Storacha). NFT.Storage uses the same IPFS/Filecoin backend with a simpler token API.
+- Added a safe env loader so blank `.env` values do not wipe out valid shell or Render environment variables.
 - Added user-driven plan editing from the UI.
 - Plan edits now trigger automatic recalculation and rescheduling.
 - Recent version history is now visible inside each plan card.
@@ -465,17 +468,19 @@ In progress:
 
 Not done yet:
 - Real Flow scheduled transaction integration
-- Verified production-grade Web3.Storage / Filecoin persistence
+- Verified production-grade NFT.Storage / Filecoin persistence
 - Real AI idea refinement
 
 ## 11. Next Step
 
 Exact next action:
-- Verify the Web3.Storage path with a real `WEB3_STORAGE_TOKEN` and confirm that remote CIDs are being produced from live plan snapshots.
+- Put a real `NFT_STORAGE_TOKEN` back into the project `.env` or Render environment, then verify that remote CIDs are being produced from live plan snapshots.
 
 Why this is next:
 - Render persistence is now proven, so the next storage risk is remote archival rather than local durability.
+- web3.storage was replaced with nft.storage (token-based, IPFS/Filecoin backed, free tier) after web3.storage migrated to Storacha and dropped token auth.
 - Co-ordinate already creates versioned snapshots and now reports storage readiness in the UI, so verifying remote CID generation is the clearest way to advance the Filecoin/IPFS side of the architecture.
+- The env loader is now safe, so the only remaining blocker is supplying a non-empty NFT token.
 - Once remote archival is proven, the next major product step can move to the real AI refinement layer.
 
 After that:
@@ -498,13 +503,13 @@ After that:
 - [x] Add storage adapter boundary
 - [x] Use README as project memory
 - [x] Document current vs target architecture honestly
-- [x] Add an environment-gated Web3.Storage adapter path with local fallback
+- [x] Add an environment-gated NFT.Storage adapter path with local fallback
 - [x] Add Render-first deployment config for a persistent-disk MVP runtime
 - [x] Extract scheduling into a dedicated local Flow adapter module
 
 ### Still Missing
 - [x] Sync `render.yaml` to the paid Render account and verify persistent writes
-- [ ] Verify Web3.Storage uploads with a real token and remote CID
+- [ ] Verify NFT.Storage uploads with a real token and remote CID
 - [ ] Replace the local scheduler adapter with real Flow integration
 - [ ] Add real AI planner/refinement layer
 - [ ] Add execution history beyond schedule history
@@ -554,10 +559,11 @@ Runtime variables:
 
 ```bash
 CO_ORDINATE_DATA_DIR=/absolute/path/to/persistent/data
-WEB3_STORAGE_TOKEN=your_token_here
+NFT_STORAGE_TOKEN=your_token_here
 ```
 
 Notes:
 - If `CO_ORDINATE_DATA_DIR` is not present, Co-ordinate stores working state under the repo-local `data/` directory.
-- If `WEB3_STORAGE_TOKEN` is not present, Co-ordinate continues using the local snapshot archive.
+- If `NFT_STORAGE_TOKEN` is not present, Co-ordinate continues using the local snapshot archive.
 - For Render, mount the persistent disk at `/var/data` and set `CO_ORDINATE_DATA_DIR=/var/data/co-ordinate`.
+- Get a free NFT.Storage API token at nft.storage.
