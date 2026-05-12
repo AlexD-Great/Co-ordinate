@@ -68,8 +68,7 @@ Current implementation status:
 - Runtime diagnostics now capture the last remote archive attempt so the UI can tell the user when remote uploads failed and local fallback stayed active.
 
 Important truth:
-- NFT.Storage uploads are deprecated and no longer the active remote path for this project.
-- As of 2026-05-12, NFT.Storage's own docs display an "Uploads have been decommissioned" notice (<https://dev.nft.storage/docs/>), so Co-ordinate now targets Storacha for supported Filecoin/IPFS uploads.
+- As of 2026-05-12, the previous remote upload path is deprecated, so Co-ordinate now targets Storacha for supported Filecoin/IPFS uploads.
 - Until `STORACHA_KEY` and `STORACHA_PROOF` are configured, the current adapter keeps local snapshots as the active fallback.
 
 ### Free-Tier Rule
@@ -455,7 +454,7 @@ Done:
 - Legacy local plan data is migrated into the new plan shape on read.
 - The storage adapter now supports an environment-gated Storacha upload path with automatic local fallback.
 - Added `.env.example` and UI support for clickable remote snapshot CIDs.
-- Replaced the deprecated NFT.Storage upload path with a Storacha-based adapter that uses delegated credentials instead of bearer tokens.
+- Replaced the old remote upload path with a Storacha-based adapter that uses delegated credentials instead of bearer tokens.
 - Added a safe env loader so blank `.env` values do not wipe out valid shell or Render environment variables.
 - Added runtime archive diagnostics so remote upload failures are visible in `/api/runtime-status` and in the UI storage health card.
 - Fixed the frontend runtime status card so it reflects the active remote archive provider.
@@ -484,7 +483,7 @@ Exact next action:
 
 Why this is next:
 - Render persistence is now proven, so the next storage risk is remote archival rather than local durability.
-- NFT.Storage's official docs show uploads as decommissioned, which means more token debugging will waste time.
+- The previous remote upload path is deprecated, which means more token debugging there would waste time.
 - Storacha's official upload docs show the backend setup Co-ordinate now expects: create an agent key, create a delegation proof, then upload through the JS client.
 - Co-ordinate already creates versioned snapshots and now reports remote archive failures in the UI, so the clearest next move is supplying working Storacha credentials and proving the first live CID.
 - Once remote archival is proven, the next major product step can move to the real AI refinement layer.
