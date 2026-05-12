@@ -4,8 +4,9 @@ import path from "node:path";
 
 import * as StorachaClient from "@storacha/client";
 import { StoreMemory } from "@storacha/client/stores/memory";
-import * as Proof from "@storacha/client/proof";
 import { Signer } from "@storacha/client/principal/ed25519";
+import { CarReader } from "@ipld/car";
+import { extract, importDAG } from "@ucanto/core/delegation";
 
 import { archiveDir } from "./runtime-paths.js";
 
@@ -65,6 +66,24 @@ function formatArchiveError(error) {
   }
 
   return "Unknown remote archive error.";
+}
+
+async function parseStorachaProof(proofBase64) {
+  const proofBytes = Uint8Array.from(Buffer.from(proofBase64, "base64"));
+  const extractResult = await extract(proofBytes);
+
+  if (extractResult.ok) {
+    return extractResult.ok;
+  }
+
+  const blocks = [];
+  const reader = await CarReader.fromBytes(proofBytes);
+
+  for await (const block of reader.blocks()) {
+    blocks.push(block);
+  }
+
+  return importDAG(blocks);
 }
 
 function encodeVarint(value) {
@@ -129,7 +148,7 @@ async function loadStorachaClient() {
         const principal = Signer.parse(storacha.key);
         const store = new StoreMemory();
         const client = await StorachaClient.create({ principal, store });
-        const proof = await Proof.parse(storacha.proof);
+        const proof = await parseStorachaProof(storacha.proof);
         const space = await client.addSpace(proof);
         await client.setCurrentSpace(space.did());
 
