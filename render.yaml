@@ -14,5 +14,7 @@ services:
     envVars:
       - key: CO_ORDINATE_DATA_DIR
         value: /var/data/co-ordinate
-      - key: NFT_STORAGE_TOKEN
+      - key: STORACHA_KEY
+        sync: false
+      - key: STORACHA_PROOF
         sync: false

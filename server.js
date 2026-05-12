@@ -100,9 +100,14 @@ const server = createServer(async (request, response) => {
 });
 
 server.listen(port, () => {
+  const storachaKey = process.env.STORACHA_KEY?.trim();
+  const storachaProof = process.env.STORACHA_PROOF?.trim();
+  const storachaReady = Boolean(storachaKey && storachaProof);
+  const storachaPartial = Boolean(storachaKey || storachaProof) && !storachaReady;
+
   console.log(`Co-ordinate is running at http://localhost:${port}`);
-  console.log(`[env] NFT_STORAGE_TOKEN: ${process.env.NFT_STORAGE_TOKEN?.trim() ? "loaded" : "NOT SET"}`);
-  if (envLoadResult.blankKeys.includes("NFT_STORAGE_TOKEN")) {
-    console.log("[env] NFT_STORAGE_TOKEN is blank in .env, so only a shell or host env var can provide it.");
+  console.log(`[env] STORACHA_REMOTE_ARCHIVE: ${storachaReady ? "ready" : storachaPartial ? "PARTIAL" : "NOT SET"}`);
+  if (envLoadResult.blankKeys.includes("STORACHA_KEY") || envLoadResult.blankKeys.includes("STORACHA_PROOF")) {
+    console.log("[env] A Storacha value is blank in .env, so only a shell or host env var can provide the missing piece.");
   }
 });

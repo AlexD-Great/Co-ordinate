@@ -33,7 +33,7 @@ function badRequest(message) {
 function buildRuntimeStatus(state) {
   const archiveStatus = getArchiveRuntimeStatus();
   const storageReferences = state.storageReferences || [];
-  const remoteSnapshots = storageReferences.filter((reference) => reference.backend === "nft-storage").length;
+  const remoteSnapshots = storageReferences.filter((reference) => reference.backend === "storacha").length;
   const localSnapshots = storageReferences.filter((reference) => reference.backend === "local-content-addressed-snapshots").length;
 
   return {
@@ -41,16 +41,25 @@ function buildRuntimeStatus(state) {
     storageBackend: state.coordination?.storageBackend || state.settings?.storageBackend || "n/a",
     persistentDataConfigured: hasCustomDataDir,
     persistenceMode: hasCustomDataDir ? "persistent-disk" : "repo-local-data",
-    nftStorageTokenConfigured: archiveStatus.tokenConfigured,
+    remoteArchiveConfigured: archiveStatus.remoteArchiveConfigured,
+    partialRemoteArchiveConfigured: archiveStatus.partialRemoteArchiveConfigured,
+    remoteArchiveProvider: archiveStatus.remoteArchiveProvider,
     preferredArchiveBackend: archiveStatus.preferredBackend,
+    archiveLastUploadStatus: archiveStatus.lastUploadStatus,
+    archiveLastUploadError: archiveStatus.lastUploadError,
+    archiveLastUploadAt: archiveStatus.lastUploadAt,
     remoteSnapshots,
     localSnapshots,
     remoteArchivalVerified: remoteSnapshots > 0,
-    recommendation: archiveStatus.tokenConfigured
+    recommendation: archiveStatus.remoteArchiveConfigured
       ? remoteSnapshots > 0
         ? "Remote snapshot storage is active. New versions should keep producing live CIDs."
-        : "NFT.Storage is configured. Create or edit a plan to produce the first remote CID."
-      : "Add NFT_STORAGE_TOKEN to enable remote Filecoin/IPFS snapshots.",
+        : archiveStatus.lastUploadStatus === "remote-failed"
+          ? "Storacha is configured, but the remote upload path failed and Co-ordinate fell back to the local archive."
+          : "Storacha is configured. Create or edit a plan to produce the first remote CID."
+      : archiveStatus.partialRemoteArchiveConfigured
+        ? "Storacha needs both STORACHA_KEY and STORACHA_PROOF before remote archival can start."
+        : "Add STORACHA_KEY and STORACHA_PROOF to enable remote Filecoin/IPFS snapshots.",
   };
 }
 

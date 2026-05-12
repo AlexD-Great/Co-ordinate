@@ -1,6 +1,6 @@
 # Co-ordinate
 
-Last updated: 2026-05-11
+Last updated: 2026-05-12
 
 This README is the single source of truth for the Co-ordinate project.
 
@@ -58,17 +58,19 @@ Important truth:
 
 Target architecture:
 - Active working state lives in a fast local database or free-tier database.
-- Long-term memory lives in Filecoin-backed storage through NFT.Storage / IPFS.
+- Long-term memory lives in Filecoin-backed storage through Storacha / IPFS.
 - Roadmap snapshots, version history, conflict logs, and execution history should all be persisted with a CID and referenced in the app database.
 
 Current implementation status:
 - The repo already has a storage adapter boundary.
 - The live code currently uses local content-addressed snapshots in `data/archive/`.
 - Each snapshot receives a CID-shaped content identifier and is tracked through a `StorageReference`.
+- Runtime diagnostics now capture the last remote archive attempt so the UI can tell the user when remote uploads failed and local fallback stayed active.
 
 Important truth:
-- Real NFT.Storage / Filecoin upload is not wired yet.
-- The current adapter is a local stand-in that preserves the same persistence contract the real storage layer will use.
+- NFT.Storage uploads are deprecated and no longer the active remote path for this project.
+- As of 2026-05-12, NFT.Storage's own docs display an "Uploads have been decommissioned" notice (<https://dev.nft.storage/docs/>), so Co-ordinate now targets Storacha for supported Filecoin/IPFS uploads.
+- Until `STORACHA_KEY` and `STORACHA_PROOF` are configured, the current adapter keeps local snapshots as the active fallback.
 
 ### Free-Tier Rule
 
@@ -87,7 +89,7 @@ Current stack:
 - Vanilla HTML, CSS, and JavaScript
 - JSON file persistence in a configurable data directory
 - Local content-addressed snapshot archive in a configurable archive directory
-- `nft.storage` package for the IPFS/Filecoin adapter path
+- `@storacha/client` package for the IPFS/Filecoin adapter path
 - Render web service blueprint for the preferred deployed MVP path
 
 Current key files:
@@ -123,7 +125,7 @@ Responsibilities:
 Current status:
 - Implemented in plain HTML/CSS/JS
 - Works against the local API
-- Shows runtime storage health, including whether persistent disk mode and NFT.Storage are configured
+- Shows runtime storage health, including whether persistent disk mode and Storacha are configured
 - Falls back to browser storage in preview mode
 
 ### Backend
@@ -186,15 +188,16 @@ Current behavior:
 - Historical snapshots are written to `archive/<cid>.json` under the same data directory
 - Every snapshot produces a `StorageReference`
 - Every persisted plan change creates a `PlanVersion`
-- When `NFT_STORAGE_TOKEN` is present, snapshot persistence now attempts an NFT.Storage upload first and falls back to the local archive if the remote upload is unavailable
+- When `STORACHA_KEY` and `STORACHA_PROOF` are present, snapshot persistence now attempts a Storacha upload first and falls back to the local archive if the remote upload is unavailable
 - The app now exposes runtime storage diagnostics through `GET /api/runtime-status` and a storage health card in the UI
+- Runtime diagnostics now include the last archive upload status and error so provider failures are visible without reading server logs
 - Blank values in `.env` no longer override valid shell or host environment variables
 
 Current storage backend:
 - `local-content-addressed-snapshots`
 
 Runtime-capable external backend:
-- `nft-storage`
+- `storacha`
 
 Preferred deployed MVP runtime:
 - Render web service running the full Node app
@@ -227,7 +230,7 @@ Implementation boundary:
 
 Target split:
 - Fast access state: local database or free-tier DB
-- Permanent memory: Filecoin-backed storage via NFT.Storage / IPFS
+- Permanent memory: Filecoin-backed storage via Storacha / IPFS
 
 Data intended for long-term storage:
 - Plan snapshots
@@ -240,16 +243,17 @@ What exists now:
 - Snapshot payloads are already content-addressed
 - A CID is generated for each persisted snapshot
 - The app database tracks those storage references
-- `src/archive.js` now includes an environment-gated NFT.Storage upload path through `NFT_STORAGE_TOKEN`
+- `src/archive.js` now includes an environment-gated Storacha upload path through `STORACHA_KEY` + `STORACHA_PROOF`
 - If the remote upload succeeds, the returned remote CID becomes the canonical `StorageReference.cid`
 - If the remote upload fails or no token is configured, the system falls back to the local archive path without breaking the MVP
-- web3.storage (old client) was replaced with nft.storage after web3.storage migrated to Storacha, which dropped token-based auth
+- The runtime status endpoint and UI now surface the last remote archive failure so the storage path can be debugged without guessing
 
 What is missing:
-- Verified end-to-end upload against a real NFT.Storage account in this repo
+- Verified live Storacha credentials in this repo and Render deployment
+- The first confirmed remote CID generated by the new Storacha adapter
 
 Implementation boundary:
-- Keep the current `StorageReference` contract and swap the persistence backend from local archive files to NFT.Storage.
+- Keep the current `StorageReference` contract and swap the persistence backend from local archive files to a supported Filecoin/IPFS provider.
 
 ## 7. Data Model
 
@@ -418,7 +422,7 @@ Status: next major build phase
 
 Goals:
 - replace local scheduler adapter with real Flow integration
-- replace local snapshot archive with NFT.Storage upload
+- replace local-only snapshot usage with verified Storacha upload
 - keep the same internal contracts
 
 ### Phase 3: AI Planning Layer
@@ -447,12 +451,14 @@ Done:
 - The API now exposes runtime storage readiness through `/api/runtime-status`.
 - Version snapshots are now created and stored through a content-addressed storage adapter.
 - The frontend now renders the richer plan structure, backend status, and conflict cards.
-- The frontend now shows storage health, including persistent disk readiness, archive mode, and whether NFT.Storage is waiting for its first CID.
+- The frontend now shows storage health, including persistent disk readiness, archive mode, and whether Storacha is waiting for its first CID.
 - Legacy local plan data is migrated into the new plan shape on read.
-- The storage adapter now supports an environment-gated NFT.Storage upload path with automatic local fallback.
+- The storage adapter now supports an environment-gated Storacha upload path with automatic local fallback.
 - Added `.env.example` and UI support for clickable remote snapshot CIDs.
-- Replaced `web3.storage` package with `nft.storage` after web3.storage migrated away from token-based auth (now Storacha). NFT.Storage uses the same IPFS/Filecoin backend with a simpler token API.
+- Replaced the deprecated NFT.Storage upload path with a Storacha-based adapter that uses delegated credentials instead of bearer tokens.
 - Added a safe env loader so blank `.env` values do not wipe out valid shell or Render environment variables.
+- Added runtime archive diagnostics so remote upload failures are visible in `/api/runtime-status` and in the UI storage health card.
+- Fixed the frontend runtime status card so it reflects the active remote archive provider.
 - Added user-driven plan editing from the UI.
 - Plan edits now trigger automatic recalculation and rescheduling.
 - Recent version history is now visible inside each plan card.
@@ -463,24 +469,24 @@ Done:
 
 In progress:
 - README is now being used as the project memory contract.
-- The architecture is aligned around Flow-first scheduling and Filecoin/IPFS-backed permanent storage, but scheduling is still local-adapter based and remote storage needs real credential verification.
+- The architecture is aligned around Flow-first scheduling and Filecoin/IPFS-backed permanent storage, but scheduling is still local-adapter based and remote archival still needs live Storacha credentials to be verified end-to-end.
 - The deployed MVP is now running on a single Render-hosted Node service with verified persistent storage.
 
 Not done yet:
 - Real Flow scheduled transaction integration
-- Verified production-grade NFT.Storage / Filecoin persistence
+- Verified production-grade Filecoin persistence through a supported remote provider
 - Real AI idea refinement
 
 ## 11. Next Step
 
 Exact next action:
-- Put a real `NFT_STORAGE_TOKEN` back into the project `.env` or Render environment, then verify that remote CIDs are being produced from live plan snapshots.
+- Generate `STORACHA_KEY` and `STORACHA_PROOF`, add them to local `.env` and Render, then verify that remote CIDs are being produced from live plan snapshots.
 
 Why this is next:
 - Render persistence is now proven, so the next storage risk is remote archival rather than local durability.
-- web3.storage was replaced with nft.storage (token-based, IPFS/Filecoin backed, free tier) after web3.storage migrated to Storacha and dropped token auth.
-- Co-ordinate already creates versioned snapshots and now reports storage readiness in the UI, so verifying remote CID generation is the clearest way to advance the Filecoin/IPFS side of the architecture.
-- The env loader is now safe, so the only remaining blocker is supplying a non-empty NFT token.
+- NFT.Storage's official docs show uploads as decommissioned, which means more token debugging will waste time.
+- Storacha's official upload docs show the backend setup Co-ordinate now expects: create an agent key, create a delegation proof, then upload through the JS client.
+- Co-ordinate already creates versioned snapshots and now reports remote archive failures in the UI, so the clearest next move is supplying working Storacha credentials and proving the first live CID.
 - Once remote archival is proven, the next major product step can move to the real AI refinement layer.
 
 After that:
@@ -503,13 +509,14 @@ After that:
 - [x] Add storage adapter boundary
 - [x] Use README as project memory
 - [x] Document current vs target architecture honestly
-- [x] Add an environment-gated NFT.Storage adapter path with local fallback
+- [x] Add an environment-gated Storacha adapter path with local fallback
 - [x] Add Render-first deployment config for a persistent-disk MVP runtime
 - [x] Extract scheduling into a dedicated local Flow adapter module
+- [x] Surface remote archive upload failures through runtime diagnostics and the UI
 
 ### Still Missing
 - [x] Sync `render.yaml` to the paid Render account and verify persistent writes
-- [ ] Verify NFT.Storage uploads with a real token and remote CID
+- [ ] Supply working Storacha credentials locally and on Render, then verify remote CIDs
 - [ ] Replace the local scheduler adapter with real Flow integration
 - [ ] Add real AI planner/refinement layer
 - [ ] Add execution history beyond schedule history
@@ -559,11 +566,17 @@ Runtime variables:
 
 ```bash
 CO_ORDINATE_DATA_DIR=/absolute/path/to/persistent/data
-NFT_STORAGE_TOKEN=your_token_here
+STORACHA_KEY=your_agent_private_key_here
+STORACHA_PROOF=your_base64_delegation_here
+STORACHA_GATEWAY_BASE_URL=https://storacha.link/ipfs/
 ```
 
 Notes:
 - If `CO_ORDINATE_DATA_DIR` is not present, Co-ordinate stores working state under the repo-local `data/` directory.
-- If `NFT_STORAGE_TOKEN` is not present, Co-ordinate continues using the local snapshot archive.
+- If `STORACHA_KEY` or `STORACHA_PROOF` is missing, Co-ordinate continues using the local snapshot archive.
 - For Render, mount the persistent disk at `/var/data` and set `CO_ORDINATE_DATA_DIR=/var/data/co-ordinate`.
-- Get a free NFT.Storage API token at nft.storage.
+- Storacha backend setup follows the official "Bring Your Own Delegations" flow:
+  - `storacha key create`
+  - store the returned private key in `STORACHA_KEY`
+  - `storacha delegation create <agent_did> --base64`
+  - store the returned delegation in `STORACHA_PROOF`

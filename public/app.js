@@ -94,12 +94,18 @@ function renderRuntimeStatus() {
   }
 
   elements.runtimePersistence.textContent = state.runtime.persistentDataConfigured ? "Persistent disk ready" : "Repo-local data";
-  elements.runtimeArchive.textContent = state.runtime.web3StorageTokenConfigured
+  elements.runtimeArchive.textContent = state.runtime.remoteArchiveConfigured
     ? state.runtime.remoteArchivalVerified
       ? `${state.runtime.remoteSnapshots} remote CID${state.runtime.remoteSnapshots === 1 ? "" : "s"}`
-      : "Token ready, waiting for first CID"
-    : `${state.runtime.localSnapshots} local snapshot${state.runtime.localSnapshots === 1 ? "" : "s"}`;
-  elements.runtimeRecommendation.textContent = state.runtime.recommendation;
+      : state.runtime.archiveLastUploadStatus === "remote-failed"
+        ? "Remote upload failed, local fallback active"
+        : `${state.runtime.remoteArchiveProvider || "Remote archive"} ready, waiting for first CID`
+    : state.runtime.partialRemoteArchiveConfigured
+      ? "Remote archive partially configured"
+      : `${state.runtime.localSnapshots} local snapshot${state.runtime.localSnapshots === 1 ? "" : "s"}`;
+  elements.runtimeRecommendation.textContent = state.runtime.archiveLastUploadError
+    ? `${state.runtime.recommendation} Last archive error: ${state.runtime.archiveLastUploadError}`
+    : state.runtime.recommendation;
 }
 
 function renderWeeklyView(data) {

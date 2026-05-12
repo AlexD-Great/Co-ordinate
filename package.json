@@ -5,8 +5,9 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "dotenv": "^17.4.2",
-    "nft.storage": "^7.1.1"
+    "@ipld/car": "^5.4.5",
+    "@storacha/client": "^2.1.3",
+    "dotenv": "^17.4.2"
   },
   "scripts": {
     "dev": "node server.js",

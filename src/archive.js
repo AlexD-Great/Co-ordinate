@@ -1,22 +1,70 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+
+import * as StorachaClient from "@storacha/client";
+import { StoreMemory } from "@storacha/client/stores/memory";
+import * as Proof from "@storacha/client/proof";
+import { Signer } from "@storacha/client/principal/ed25519";
+
 import { archiveDir } from "./runtime-paths.js";
 
 const base32Alphabet = "abcdefghijklmnopqrstuvwxyz234567";
-let nftStorageModulePromise = null;
+const defaultGatewayBaseUrl = "https://storacha.link/ipfs/";
 
-function getNftStorageToken() {
-  return process.env.NFT_STORAGE_TOKEN?.trim() || null;
+let storachaClientPromise = null;
+
+const archiveRuntime = {
+  lastUploadStatus: "idle",
+  lastUploadError: null,
+  lastUploadAt: null,
+};
+
+function getStorachaCredentials() {
+  const key = process.env.STORACHA_KEY?.trim() || null;
+  const proof = process.env.STORACHA_PROOF?.trim() || null;
+  const gatewayBaseUrl = process.env.STORACHA_GATEWAY_BASE_URL?.trim() || defaultGatewayBaseUrl;
+
+  return {
+    key,
+    proof,
+    gatewayBaseUrl,
+    configured: Boolean(key && proof),
+    partiallyConfigured: Boolean(key || proof) && !(key && proof),
+  };
 }
 
 export function getArchiveRuntimeStatus() {
-  const token = getNftStorageToken();
+  const storacha = getStorachaCredentials();
+
   return {
-    tokenConfigured: Boolean(token),
-    preferredBackend: token ? "nft-storage" : "local-content-addressed-snapshots",
-    gatewayBaseUrl: token ? "https://nftstorage.link/ipfs/" : null,
+    remoteArchiveConfigured: storacha.configured,
+    partialRemoteArchiveConfigured: storacha.partiallyConfigured,
+    preferredBackend: storacha.configured ? "storacha" : "local-content-addressed-snapshots",
+    gatewayBaseUrl: storacha.configured ? storacha.gatewayBaseUrl : null,
+    remoteArchiveProvider: storacha.configured ? "storacha" : null,
+    lastUploadStatus: archiveRuntime.lastUploadStatus,
+    lastUploadError: archiveRuntime.lastUploadError,
+    lastUploadAt: archiveRuntime.lastUploadAt,
   };
+}
+
+function markArchiveAttempt(status, error = null) {
+  archiveRuntime.lastUploadStatus = status;
+  archiveRuntime.lastUploadError = error;
+  archiveRuntime.lastUploadAt = new Date().toISOString();
+}
+
+function formatArchiveError(error) {
+  if (typeof error?.message === "string" && error.message.trim()) {
+    return error.message.trim();
+  }
+
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+
+  return "Unknown remote archive error.";
 }
 
 function encodeVarint(value) {
@@ -68,25 +116,38 @@ function createCidFromPayload(payload) {
   return `b${toBase32(cidBytes)}`;
 }
 
-async function loadNftStorageModule() {
-  const token = getNftStorageToken();
+async function loadStorachaClient() {
+  const storacha = getStorachaCredentials();
 
-  if (!token) {
+  if (!storacha.configured) {
     return null;
   }
 
-  if (!nftStorageModulePromise) {
-    nftStorageModulePromise = import("nft.storage")
-      .then((module) => ({
-        client: new module.NFTStorage({ token }),
-      }))
-      .catch((error) => {
-        console.error("[archive] Failed to load nft.storage module:", error.message);
+  if (!storachaClientPromise) {
+    storachaClientPromise = (async () => {
+      try {
+        const principal = Signer.parse(storacha.key);
+        const store = new StoreMemory();
+        const client = await StorachaClient.create({ principal, store });
+        const proof = await Proof.parse(storacha.proof);
+        const space = await client.addSpace(proof);
+        await client.setCurrentSpace(space.did());
+
+        return {
+          client,
+          gatewayBaseUrl: storacha.gatewayBaseUrl,
+          spaceDid: space.did(),
+        };
+      } catch (error) {
+        const message = formatArchiveError(error);
+        markArchiveAttempt("remote-failed", message);
+        console.error("[archive] Failed to initialize Storacha client:", message);
         return null;
-      });
+      }
+    })();
   }
 
-  return nftStorageModulePromise;
+  return storachaClientPromise;
 }
 
 async function writeLocalArchive({ cid, payload }) {
@@ -97,24 +158,26 @@ async function writeLocalArchive({ cid, payload }) {
 }
 
 async function writeRemoteSnapshot({ planId, payload, localCid }) {
-  const nftStorage = await loadNftStorageModule();
+  const storacha = await loadStorachaClient();
 
-  if (!nftStorage) {
+  if (!storacha) {
     return null;
   }
 
   const payloadText = JSON.stringify(payload, null, 2);
   const blob = new Blob([payloadText], { type: "application/json" });
-  const cid = await nftStorage.client.storeBlob(blob);
+  const cidLink = await storacha.client.uploadFile(blob);
+  const cid = cidLink.toString();
+  markArchiveAttempt("remote-success");
 
   return {
     id: `storage_${Math.random().toString(36).slice(2, 10)}`,
     planId,
     cid,
-    backend: "nft-storage",
+    backend: "storacha",
     kind: "plan-snapshot",
     filePath: null,
-    gatewayUrl: `https://nftstorage.link/ipfs/${cid}`,
+    gatewayUrl: `${storacha.gatewayBaseUrl}${cid}`,
     localFallbackCid: localCid,
     createdAt: new Date().toISOString(),
   };
@@ -123,20 +186,39 @@ async function writeRemoteSnapshot({ planId, payload, localCid }) {
 export async function writeSnapshot({ planId, payload }) {
   const cid = createCidFromPayload(payload);
   const filePath = await writeLocalArchive({ cid, payload });
+  const storacha = getStorachaCredentials();
 
-  if (getNftStorageToken()) {
-    try {
-      const remoteReference = await writeRemoteSnapshot({ planId, payload, localCid: cid });
+  if (!storacha.configured) {
+    markArchiveAttempt("local-only");
+    return {
+      id: `storage_${Math.random().toString(36).slice(2, 10)}`,
+      planId,
+      cid,
+      backend: "local-content-addressed-snapshots",
+      kind: "plan-snapshot",
+      filePath,
+      createdAt: new Date().toISOString(),
+    };
+  }
 
-      if (remoteReference) {
-        return {
-          ...remoteReference,
-          filePath,
-        };
-      }
-    } catch (error) {
-      console.error("[archive] Remote upload failed, falling back to local:", error.message);
+  try {
+    const remoteReference = await writeRemoteSnapshot({ planId, payload, localCid: cid });
+
+    if (remoteReference) {
+      return {
+        ...remoteReference,
+        filePath,
+      };
     }
+
+    markArchiveAttempt(
+      "remote-failed",
+      "Storacha client initialization did not complete, so Co-ordinate kept the local snapshot.",
+    );
+  } catch (error) {
+    const message = formatArchiveError(error);
+    markArchiveAttempt("remote-failed", message);
+    console.error("[archive] Remote upload failed, falling back to local:", message);
   }
 
   return {
